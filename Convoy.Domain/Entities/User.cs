@@ -12,6 +12,9 @@ public class User : Auditable
     [Column("name")]
     public string Name { get; set; } = string.Empty;
 
+    [Column("username")]
+    public string Username { get; set; } = string.Empty;
+
     [Column("phone")]
     public string? Phone { get; set; }
 

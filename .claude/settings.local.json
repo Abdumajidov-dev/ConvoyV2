@@ -8,7 +8,18 @@
       "Bash(git add:*)",
       "Bash(del nul)",
       "Bash(cmd.exe /c del nul)",
-      "Bash(cmd.exe /c dir /s /b nul)"
+      "Bash(cmd.exe /c dir /s /b nul)",
+      "Bash(dir /s /b *.csproj)",
+      "Bash(dir /b:*)",
+      "Bash(cmd.exe /c dir /s /b *.csproj)",
+      "Bash(cmd.exe /c dir /b)",
+      "Bash(cmd.exe /c dir /b /s *.csproj 2)",
+      "Bash(dotnet ef migrations add:*)",
+      "Bash(dotnet ef database:*)",
+      "Bash(dotnet ef migrations:*)",
+      "Bash(psql:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet run:*)"
     ]
   }
 }
