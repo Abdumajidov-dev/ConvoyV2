@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database - Production
+  postgres:
+    image: postgres:16
+    container_name: convoy-postgres-prod
+    environment:
+      POSTGRES_DB: ${DB_NAME:-convoy_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - ./database-setup.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - postgres-data-prod:/var/lib/postgresql/data
+    networks:
+      - convoy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Convoy API - Production
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: convoy-api-prod
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${DB_NAME:-convoy_db};Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - convoy-network
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres-data-prod:
+    driver: local
+
+networks:
+  convoy-network:
+    driver: bridge

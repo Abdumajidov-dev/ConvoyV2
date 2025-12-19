@@ -1,0 +1,6 @@
+@Convoy.Api_HostAddress = http://localhost:3903
+
+GET {{Convoy.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
