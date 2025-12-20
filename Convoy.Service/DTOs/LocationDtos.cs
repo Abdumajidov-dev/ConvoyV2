@@ -1,11 +1,11 @@
 namespace Convoy.Service.DTOs;
 
+
 /// <summary>
-/// Location yaratish uchun DTO
+/// Location data without UserId (for UserLocationBatchDto)
 /// </summary>
-public class CreateLocationDto
+public class LocationDataDto
 {
-    public int UserId { get; set; }
     public DateTime RecordedAt { get; set; }
     public decimal Latitude { get; set; }
     public decimal Longitude { get; set; }
@@ -21,11 +21,12 @@ public class CreateLocationDto
 }
 
 /// <summary>
-/// Batch location yaratish uchun DTO
+/// Bitta user uchun ko'p location yuborish (userId va locations array)
 /// </summary>
-public class CreateLocationBatchDto
+public class UserLocationBatchDto
 {
-    public List<CreateLocationDto> Locations { get; set; } = new();
+    public int UserId { get; set; }
+    public List<LocationDataDto> Locations { get; set; } = new();
 }
 
 /// <summary>

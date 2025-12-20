@@ -1,3 +1,4 @@
+using Convoy.Api.Models;
 using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,7 @@ namespace Convoy.Api.Controllers;
 /// Location tracking API controller
 /// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/locations")]
 public class LocationController : ControllerBase
 {
     private readonly ILocationService _locationService;
@@ -23,162 +24,135 @@ public class LocationController : ControllerBase
     }
 
     /// <summary>
-    /// Yangi location yaratish
-    /// POST /api/location
+    /// Location yaratish (user_id + locations array)
+    /// POST /api/locations
     /// </summary>
     [HttpPost]
-    [ProducesResponseType(typeof(LocationResponseDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> CreateLocation([FromBody] CreateLocationDto dto)
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<LocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> CreateLocations([FromBody] UserLocationBatchDto dto)
     {
-        try
-        {
-            var result = await _locationService.CreateLocationAsync(dto);
-            return CreatedAtAction(
-                nameof(GetLocationById),
-                new { id = result.Id, recordedAt = result.RecordedAt },
-                result
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating location");
-            return BadRequest(new { error = ex.Message });
-        }
-    }
+        var result = await _locationService.CreateUserLocationBatchAsync(dto);
 
-    /// <summary>
-    /// Batch location yaratish
-    /// POST /api/location/batch
-    /// </summary>
-    [HttpPost("batch")]
-    [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> CreateLocationBatch([FromBody] CreateLocationBatchDto dto)
-    {
-        try
+        var apiResponse = new ApiResponse<IEnumerable<LocationResponseDto>>
         {
-            var count = await _locationService.CreateLocationBatchAsync(dto);
-            return CreatedAtAction(nameof(CreateLocationBatch), new { count });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating batch locations");
-            return BadRequest(new { error = ex.Message });
-        }
+            Status = result.Success,
+            Message = result.Message,
+            Data = result.Data
+        };
+
+        return StatusCode(result.StatusCode, apiResponse);
     }
 
     /// <summary>
     /// User location'larini olish
-    /// GET /api/location/user/{userId}
+    /// GET /api/locations/user/{userId}
     /// </summary>
-    [HttpGet("user/{userId}")]
-    [ProducesResponseType(typeof(IEnumerable<LocationResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [HttpGet("user/{user_id}")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<LocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetUserLocations(
-        int userId,
-        [FromQuery] DateTime? startDate,
-        [FromQuery] DateTime? endDate,
+        [FromRoute(Name = "user_id")] int userId,
+        [FromQuery(Name = "start_date")] DateTime? startDate,
+        [FromQuery(Name = "end_date")] DateTime? endDate,
         [FromQuery] int? limit)
     {
-        try
+        var query = new LocationQueryDto
         {
-            var query = new LocationQueryDto
-            {
-                UserId = userId,
-                StartDate = startDate,
-                EndDate = endDate,
-                Limit = limit
-            };
+            UserId = userId,
+            StartDate = startDate,
+            EndDate = endDate,
+            Limit = limit
+        };
 
-            var locations = await _locationService.GetUserLocationsAsync(query);
-            return Ok(locations);
-        }
-        catch (Exception ex)
+        var result = await _locationService.GetUserLocationsAsync(query);
+
+        var apiResponse = new ApiResponse<IEnumerable<LocationResponseDto>>
         {
-            _logger.LogError(ex, "Error getting user locations");
-            return BadRequest(new { error = ex.Message });
-        }
+            Status = result.Success,
+            Message = result.Message,
+            Data = result.Data
+        };
+
+        return StatusCode(result.StatusCode, apiResponse);
     }
 
     /// <summary>
     /// Oxirgi location'larni olish
-    /// GET /api/location/user/{userId}/last
+    /// GET /api/locations/user/{user_id}/last
     /// </summary>
-    [HttpGet("user/{userId}/last")]
-    [ProducesResponseType(typeof(IEnumerable<LocationResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [HttpGet("user/{user_id}/last")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<LocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetLastLocations(
-        int userId,
+        [FromRoute(Name = "user_id")] int userId,
         [FromQuery] int count = 100)
     {
-        try
+        var result = await _locationService.GetLastLocationsAsync(userId, count);
+
+        var apiResponse = new ApiResponse<IEnumerable<LocationResponseDto>>
         {
-            var locations = await _locationService.GetLastLocationsAsync(userId, count);
-            return Ok(locations);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting last locations");
-            return BadRequest(new { error = ex.Message });
-        }
+            Status = result.Success,
+            Message = result.Message,
+            Data = result.Data
+        };
+
+        return StatusCode(result.StatusCode, apiResponse);
     }
 
     /// <summary>
     /// Kunlik statistikalarni olish
-    /// GET /api/location/user/{userId}/daily-statistics
+    /// GET /api/locations/user/{user_id}/daily_statistics
     /// </summary>
-    [HttpGet("user/{userId}/daily-statistics")]
-    [ProducesResponseType(typeof(IEnumerable<DailyStatisticsDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [HttpGet("user/{user_id}/daily_statistics")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<DailyStatisticsDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetDailyStatistics(
-        int userId,
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate)
+        [FromRoute(Name = "user_id")] int userId,
+        [FromQuery(Name = "start_date")] DateTime startDate,
+        [FromQuery(Name = "end_date")] DateTime endDate)
     {
-        try
+        var query = new DailySummaryQueryDto
         {
-            var query = new DailySummaryQueryDto
-            {
-                UserId = userId,
-                StartDate = startDate,
-                EndDate = endDate
-            };
+            UserId = userId,
+            StartDate = startDate,
+            EndDate = endDate
+        };
 
-            var statistics = await _locationService.GetDailyStatisticsAsync(query);
-            return Ok(statistics);
-        }
-        catch (Exception ex)
+        var result = await _locationService.GetDailyStatisticsAsync(query);
+
+        var apiResponse = new ApiResponse<IEnumerable<DailyStatisticsDto>>
         {
-            _logger.LogError(ex, "Error getting daily statistics");
-            return BadRequest(new { error = ex.Message });
-        }
+            Status = result.Success,
+            Message = result.Message,
+            Data = result.Data
+        };
+
+        return StatusCode(result.StatusCode, apiResponse);
     }
 
     /// <summary>
     /// ID orqali location olish
-    /// GET /api/location/{id}
+    /// GET /api/locations/{id}
     /// </summary>
     [HttpGet("{id}")]
-    [ProducesResponseType(typeof(LocationResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<LocationResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetLocationById(
         long id,
-        [FromQuery] DateTime recordedAt)
+        [FromQuery(Name = "recorded_at")] DateTime recordedAt)
     {
-        try
+        var result = await _locationService.GetLocationByIdAsync(id, recordedAt);
+
+        var apiResponse = new ApiResponse<LocationResponseDto>
         {
-            var location = await _locationService.GetLocationByIdAsync(id, recordedAt);
-            if (location == null)
-            {
-                return NotFound(new { error = "Location not found" });
-            }
-            return Ok(location);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting location by ID");
-            return BadRequest(new { error = ex.Message });
-        }
+            Status = result.Success,
+            Message = result.Message,
+            Data = result.Data
+        };
+
+        return StatusCode(result.StatusCode, apiResponse);
     }
 }

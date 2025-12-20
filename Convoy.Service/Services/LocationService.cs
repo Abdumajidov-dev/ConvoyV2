@@ -1,5 +1,6 @@
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
+using Convoy.Service.Common;
 using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -7,107 +8,54 @@ using Microsoft.Extensions.Logging;
 namespace Convoy.Service.Services;
 
 /// <summary>
-/// Location service implementation
+/// Location service implementation with real-time SignalR broadcasting
 /// </summary>
 public class LocationService : ILocationService
 {
     private readonly ILocationRepository _locationRepository;
     private readonly ILogger<LocationService> _logger;
+    private readonly object? _locationHubContext;
 
     public LocationService(
         ILocationRepository locationRepository,
-        ILogger<LocationService> logger)
+        ILogger<LocationService> logger,
+        object? locationHubContext = null)
     {
         _locationRepository = locationRepository;
         _logger = logger;
+        _locationHubContext = locationHubContext;
     }
 
-    /// <summary>
-    /// Yangi location yaratish
-    /// </summary>
-    public async Task<LocationResponseDto> CreateLocationAsync(CreateLocationDto dto)
-    {
-        try
-        {
-            // Oldingi location'ni olish (masofa hisoblash uchun)
-            var previousLocations = await _locationRepository.GetLastLocationsAsync(dto.UserId, 1);
-            var previousLocation = previousLocations.FirstOrDefault();
-
-            decimal? distanceFromPrevious = null;
-            if (previousLocation != null)
-            {
-                var distance = _locationRepository.CalculateDistance(
-                    previousLocation.Latitude,
-                    previousLocation.Longitude,
-                    dto.Latitude,
-                    dto.Longitude
-                );
-                distanceFromPrevious = (decimal)distance;
-            }
-
-            // Location entity yaratish
-            var location = new Location
-            {
-                UserId = dto.UserId,
-                RecordedAt = dto.RecordedAt,
-                Latitude = dto.Latitude,
-                Longitude = dto.Longitude,
-                Accuracy = dto.Accuracy,
-                Speed = dto.Speed,
-                Heading = dto.Heading,
-                Altitude = dto.Altitude,
-                ActivityType = dto.ActivityType,
-                ActivityConfidence = dto.ActivityConfidence,
-                IsMoving = dto.IsMoving,
-                BatteryLevel = dto.BatteryLevel,
-                IsCharging = dto.IsCharging,
-                DistanceFromPrevious = distanceFromPrevious,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            var id = await _locationRepository.InsertAsync(location);
-            location.Id = id;
-
-            _logger.LogInformation("Location created for UserId={UserId}, Distance={Distance}m",
-                dto.UserId, distanceFromPrevious);
-
-            return MapToDto(location);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating location for UserId={UserId}", dto.UserId);
-            throw;
-        }
-    }
 
     /// <summary>
-    /// Batch location yaratish
+    /// Bitta user uchun ko'p location yaratish (userId + locations array)
     /// </summary>
-    public async Task<int> CreateLocationBatchAsync(CreateLocationBatchDto dto)
+    public async Task<ServiceResult<IEnumerable<LocationResponseDto>>> CreateUserLocationBatchAsync(UserLocationBatchDto dto)
     {
         try
         {
             if (!dto.Locations.Any())
             {
-                return 0;
+                return ServiceResult<IEnumerable<LocationResponseDto>>.BadRequest(
+                    "Locations array bo'sh bo'lmasligi kerak");
             }
 
             // Vaqt bo'yicha sort qilish
             var sortedLocations = dto.Locations.OrderBy(l => l.RecordedAt).ToList();
 
             var locations = new List<Location>();
+            var responseDtos = new List<LocationResponseDto>();
             Location? previousLocation = null;
 
-            // Birinchi user'ning oldingi location'ini olish
-            var firstUserId = sortedLocations.First().UserId;
-            var lastLocations = await _locationRepository.GetLastLocationsAsync(firstUserId, 1);
+            // User'ning oldingi location'ini olish
+            var lastLocations = await _locationRepository.GetLastLocationsAsync(dto.UserId, 1);
             previousLocation = lastLocations.FirstOrDefault();
 
             foreach (var locDto in sortedLocations)
             {
                 decimal? distanceFromPrevious = null;
 
-                if (previousLocation != null && previousLocation.UserId == locDto.UserId)
+                if (previousLocation != null)
                 {
                     var distance = _locationRepository.CalculateDistance(
                         previousLocation.Latitude,
@@ -120,7 +68,7 @@ public class LocationService : ILocationService
 
                 var location = new Location
                 {
-                    UserId = locDto.UserId,
+                    UserId = dto.UserId,
                     RecordedAt = locDto.RecordedAt,
                     Latitude = locDto.Latitude,
                     Longitude = locDto.Longitude,
@@ -132,7 +80,7 @@ public class LocationService : ILocationService
                     ActivityConfidence = locDto.ActivityConfidence,
                     IsMoving = locDto.IsMoving,
                     BatteryLevel = locDto.BatteryLevel,
-                    IsCharging = locDto.IsCharging,
+                    IsCharging = locDto.IsCharging ?? false,
                     DistanceFromPrevious = distanceFromPrevious,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -141,22 +89,58 @@ public class LocationService : ILocationService
                 previousLocation = location;
             }
 
-            var count = await _locationRepository.InsertBatchAsync(locations);
-            _logger.LogInformation("Batch created {Count} locations", count);
+            // Database'ga saqlash - ID'lari bilan qaytadi
+            var insertedLocations = await _locationRepository.InsertBatchAsync(locations);
+            var insertedLocationsList = insertedLocations.ToList();
+            _logger.LogInformation("User {UserId} uchun {Count} ta location yaratildi", dto.UserId, insertedLocationsList.Count);
 
-            return count;
+            // Response DTO'lar yaratish - database'dan qaytgan ID'lar bilan
+            foreach (var location in insertedLocationsList)
+            {
+                var responseDto = MapToDto(location);
+                responseDtos.Add(responseDto);
+
+                // SignalR orqali real-time broadcast
+                if (_locationHubContext != null)
+                {
+                    try
+                    {
+                        dynamic hubContext = _locationHubContext;
+
+                        // Specific user'ni track qilayotganlarga
+                        await hubContext.Clients.Group($"user_{dto.UserId}")
+                            .SendAsync("LocationUpdated", responseDto);
+
+                        // Barcha user'larni track qilayotganlarga
+                        await hubContext.Clients.Group("all_users")
+                            .SendAsync("LocationUpdated", responseDto);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to broadcast location via SignalR for UserId={UserId}", dto.UserId);
+                    }
+                }
+            }
+
+            var message = responseDtos.Count == 1
+                ? "Location muvaffaqiyatli yaratildi"
+                : $"{responseDtos.Count} ta location muvaffaqiyatli yaratildi";
+
+            return ServiceResult<IEnumerable<LocationResponseDto>>.Created(responseDtos, message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating batch locations");
-            throw;
+            _logger.LogError(ex, "Error creating user location batch for UserId={UserId}", dto.UserId);
+            return ServiceResult<IEnumerable<LocationResponseDto>>.ServerError(
+                "Location yaratishda xatolik yuz berdi");
         }
     }
+
 
     /// <summary>
     /// User location'larini olish
     /// </summary>
-    public async Task<IEnumerable<LocationResponseDto>> GetUserLocationsAsync(LocationQueryDto query)
+    public async Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetUserLocationsAsync(LocationQueryDto query)
     {
         try
         {
@@ -178,36 +162,45 @@ public class LocationService : ILocationService
                 );
             }
 
-            return locations.Select(MapToDto);
+            var result = locations.Select(MapToDto);
+            return ServiceResult<IEnumerable<LocationResponseDto>>.Ok(
+                result,
+                "Location ma'lumotlari muvaffaqiyatli olindi");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting locations for UserId={UserId}", query.UserId);
-            throw;
+            return ServiceResult<IEnumerable<LocationResponseDto>>.ServerError(
+                "Location ma'lumotlarini olishda xatolik yuz berdi");
         }
     }
 
     /// <summary>
     /// Oxirgi location'larni olish
     /// </summary>
-    public async Task<IEnumerable<LocationResponseDto>> GetLastLocationsAsync(int userId, int count = 100)
+    public async Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetLastLocationsAsync(int userId, int count = 100)
     {
         try
         {
             var locations = await _locationRepository.GetLastLocationsAsync(userId, count);
-            return locations.Select(MapToDto);
+            var result = locations.Select(MapToDto).ToList();
+
+            return ServiceResult<IEnumerable<LocationResponseDto>>.Ok(
+                result,
+                $"Oxirgi {result.Count} ta location olindi");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting last locations for UserId={UserId}", userId);
-            throw;
+            return ServiceResult<IEnumerable<LocationResponseDto>>.ServerError(
+                "Location ma'lumotlarini olishda xatolik yuz berdi");
         }
     }
 
     /// <summary>
     /// Kunlik statistikalarni olish
     /// </summary>
-    public async Task<IEnumerable<DailyStatisticsDto>> GetDailyStatisticsAsync(DailySummaryQueryDto query)
+    public async Task<ServiceResult<IEnumerable<DailyStatisticsDto>>> GetDailyStatisticsAsync(DailySummaryQueryDto query)
     {
         try
         {
@@ -233,34 +226,46 @@ public class LocationService : ILocationService
                 Date = kvp.Key,
                 TotalDistanceMeters = kvp.Value,
                 LocationCount = locationsByDate.GetValueOrDefault(kvp.Key, 0)
-            }).OrderBy(s => s.Date);
+            }).OrderBy(s => s.Date).ToList();
 
             _logger.LogInformation("Retrieved daily statistics for UserId={UserId}, Days={Days}",
-                query.UserId, statistics.Count());
+                query.UserId, statistics.Count);
 
-            return statistics;
+            return ServiceResult<IEnumerable<DailyStatisticsDto>>.Ok(
+                statistics,
+                "Kunlik statistikalar muvaffaqiyatli olindi");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting daily statistics for UserId={UserId}", query.UserId);
-            throw;
+            return ServiceResult<IEnumerable<DailyStatisticsDto>>.ServerError(
+                "Statistikalarni olishda xatolik yuz berdi");
         }
     }
 
     /// <summary>
     /// ID orqali location olish
     /// </summary>
-    public async Task<LocationResponseDto?> GetLocationByIdAsync(long id, DateTime recordedAt)
+    public async Task<ServiceResult<LocationResponseDto>> GetLocationByIdAsync(long id, DateTime recordedAt)
     {
         try
         {
             var location = await _locationRepository.GetByIdAsync(id, recordedAt);
-            return location != null ? MapToDto(location) : null;
+
+            if (location == null)
+            {
+                return ServiceResult<LocationResponseDto>.NotFound("Location topilmadi");
+            }
+
+            return ServiceResult<LocationResponseDto>.Ok(
+                MapToDto(location),
+                "Location muvaffaqiyatli olindi");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting location by Id={Id}", id);
-            throw;
+            return ServiceResult<LocationResponseDto>.ServerError(
+                "Location ma'lumotini olishda xatolik yuz berdi");
         }
     }
 

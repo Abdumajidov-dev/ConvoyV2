@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Convoy.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/auth")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -21,7 +21,7 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Telefon raqamni tekshirish (PHP API orqali)
     /// </summary>
-    [HttpPost("verify-number")]
+    [HttpPost("verify_number")]
     public async Task<IActionResult> VerifyNumber([FromBody] VerifyNumberRequest request)
     {
         try
@@ -45,7 +45,7 @@ public class AuthController : ControllerBase
     /// <summary>
     /// OTP kod yuborish
     /// </summary>
-    [HttpPost("send-otp")]
+    [HttpPost("send_otp")]
     public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest request)
     {
         try
@@ -69,7 +69,7 @@ public class AuthController : ControllerBase
     /// <summary>
     /// OTP kodni tekshirish va JWT token olish
     /// </summary>
-    [HttpPost("verify-otp")]
+    [HttpPost("verify_otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
     {
         try

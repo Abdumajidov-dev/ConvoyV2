@@ -19,7 +19,11 @@
       "Bash(dotnet ef migrations:*)",
       "Bash(psql:*)",
       "Bash(dotnet add:*)",
-      "Bash(dotnet run:*)"
+      "Bash(dotnet run:*)",
+      "Bash(dotnet remove:*)",
+      "Bash(timeout /t 8 /nobreak)",
+      "Bash(cmd.exe /c dir /b Convoy.ApiControllers)",
+      "Bash(cmd.exe /c dir /b Convoy.ApiControllers 2)"
     ]
   }
 }

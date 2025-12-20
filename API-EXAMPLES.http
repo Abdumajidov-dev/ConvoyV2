@@ -27,7 +27,74 @@ Content-Type: application/json
 }
 
 ### ============================================
-### 2. Create Batch Locations (Simulating GPS Track)
+### 2. Create User Location Batch (YANGI - UserId + Locations Array)
+### ============================================
+POST {{baseUrl}}/api/location/user-batch
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "locations": [
+    {
+      "recordedAt": "2025-12-18T08:00:00Z",
+      "latitude": 41.311151,
+      "longitude": 69.279737,
+      "accuracy": 12.0,
+      "speed": 0.0,
+      "activityType": "still",
+      "isMoving": false,
+      "batteryLevel": 95,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:05:00Z",
+      "latitude": 41.312000,
+      "longitude": 69.280000,
+      "accuracy": 10.5,
+      "speed": 1.5,
+      "activityType": "walking",
+      "isMoving": true,
+      "batteryLevel": 94,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:10:00Z",
+      "latitude": 41.313000,
+      "longitude": 69.281000,
+      "accuracy": 8.0,
+      "speed": 12.5,
+      "activityType": "automotive",
+      "isMoving": true,
+      "batteryLevel": 93,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:15:00Z",
+      "latitude": 41.315000,
+      "longitude": 69.283000,
+      "accuracy": 7.5,
+      "speed": 15.0,
+      "activityType": "automotive",
+      "isMoving": true,
+      "batteryLevel": 92,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:20:00Z",
+      "latitude": 41.318000,
+      "longitude": 69.285000,
+      "accuracy": 9.0,
+      "speed": 0.5,
+      "activityType": "still",
+      "isMoving": false,
+      "batteryLevel": 91,
+      "isCharging": true
+    }
+  ]
+}
+
+### ============================================
+### 3. Create Batch Locations (ESKI - Har birida UserId bor)
 ### ============================================
 POST {{baseUrl}}/api/location/batch
 Content-Type: application/json
@@ -69,71 +136,47 @@ Content-Type: application/json
       "isMoving": true,
       "batteryLevel": 93,
       "isCharging": false
-    },
-    {
-      "userId": 1,
-      "recordedAt": "2025-12-18T08:15:00Z",
-      "latitude": 41.315000,
-      "longitude": 69.283000,
-      "accuracy": 7.5,
-      "speed": 15.0,
-      "activityType": "automotive",
-      "isMoving": true,
-      "batteryLevel": 92,
-      "isCharging": false
-    },
-    {
-      "userId": 1,
-      "recordedAt": "2025-12-18T08:20:00Z",
-      "latitude": 41.318000,
-      "longitude": 69.285000,
-      "accuracy": 9.0,
-      "speed": 0.5,
-      "activityType": "still",
-      "isMoving": false,
-      "batteryLevel": 91,
-      "isCharging": true
     }
   ]
 }
 
 ### ============================================
-### 3. Get User Locations (with date range)
+### 4. Get User Locations (with date range)
 ### ============================================
 GET {{baseUrl}}/api/location/user/{{userId}}?startDate=2025-12-01T00:00:00Z&endDate=2025-12-31T23:59:59Z
 
 ### ============================================
-### 4. Get User Locations (with limit, no date range)
+### 5. Get User Locations (with limit, no date range)
 ### ============================================
 GET {{baseUrl}}/api/location/user/{{userId}}?limit=50
 
 ### ============================================
-### 5. Get Last N Locations
+### 6. Get Last N Locations
 ### ============================================
 GET {{baseUrl}}/api/location/user/{{userId}}/last?count=100
 
 ### ============================================
-### 6. Get Last 10 Locations
+### 7. Get Last 10 Locations
 ### ============================================
 GET {{baseUrl}}/api/location/user/{{userId}}/last?count=10
 
 ### ============================================
-### 7. Get Daily Statistics (December 2025)
+### 8. Get Daily Statistics (December 2025)
 ### ============================================
 GET {{baseUrl}}/api/location/user/{{userId}}/daily-statistics?startDate=2025-12-01&endDate=2025-12-31
 
 ### ============================================
-### 8. Get Daily Statistics (This Week)
+### 9. Get Daily Statistics (This Week)
 ### ============================================
 GET {{baseUrl}}/api/location/user/{{userId}}/daily-statistics?startDate=2025-12-15&endDate=2025-12-22
 
 ### ============================================
-### 9. Get Location by ID
+### 10. Get Location by ID
 ### ============================================
 GET {{baseUrl}}/api/location/1?recordedAt=2025-12-18T10:30:00Z
 
 ### ============================================
-### 10. Create Location for Different User
+### 11. Create Location for Different User
 ### ============================================
 POST {{baseUrl}}/api/location
 Content-Type: application/json
@@ -155,7 +198,7 @@ Content-Type: application/json
 }
 
 ### ============================================
-### 11. Simulating Real-time GPS Tracking
+### 12. Simulating Real-time GPS Tracking
 ### ============================================
 POST {{baseUrl}}/api/location
 Content-Type: application/json

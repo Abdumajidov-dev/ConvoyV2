@@ -13,9 +13,9 @@ public interface ILocationRepository
     Task<long> InsertAsync(Location location);
 
     /// <summary>
-    /// Bir nechta location'larni batch insert
+    /// Bir nechta location'larni batch insert - yaratilgan location'larni ID bilan qaytaradi
     /// </summary>
-    Task<int> InsertBatchAsync(IEnumerable<Location> locations);
+    Task<IEnumerable<Location>> InsertBatchAsync(IEnumerable<Location> locations);
 
     /// <summary>
     /// User'ning location'larini vaqt oralig'ida olish

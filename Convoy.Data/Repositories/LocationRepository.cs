@@ -54,9 +54,9 @@ public class LocationRepository : ILocationRepository
     }
 
     /// <summary>
-    /// Batch insert - bir nechta location'larni bir vaqtda yozish
+    /// Batch insert - bir nechta location'larni bir vaqtda yozish va ID'lari bilan qaytarish
     /// </summary>
-    public async Task<int> InsertBatchAsync(IEnumerable<Location> locations)
+    public async Task<IEnumerable<Location>> InsertBatchAsync(IEnumerable<Location> locations)
     {
         const string sql = @"
             INSERT INTO locations (
@@ -71,13 +71,27 @@ public class LocationRepository : ILocationRepository
                 @ActivityType, @ActivityConfidence, @IsMoving,
                 @BatteryLevel, @IsCharging, @DistanceFromPrevious,
                 @CreatedAt
-            )";
+            )
+            RETURNING id, user_id as UserId, recorded_at as RecordedAt,
+                      latitude, longitude, accuracy, speed, heading, altitude,
+                      activity_type as ActivityType, activity_confidence as ActivityConfidence,
+                      is_moving as IsMoving, battery_level as BatteryLevel,
+                      is_charging as IsCharging, distance_from_previous as DistanceFromPrevious,
+                      created_at as CreatedAt";
 
         try
         {
-            var rowsAffected = await _connection.ExecuteAsync(sql, locations);
-            _logger.LogInformation("Batch inserted {Count} locations", rowsAffected);
-            return rowsAffected;
+            var insertedLocations = new List<Location>();
+
+            // Har bir location uchun alohida insert qilish (RETURNING ishlashi uchun)
+            foreach (var location in locations)
+            {
+                var insertedLocation = await _connection.QuerySingleAsync<Location>(sql, location);
+                insertedLocations.Add(insertedLocation);
+            }
+
+            _logger.LogInformation("Batch inserted {Count} locations", insertedLocations.Count);
+            return insertedLocations;
         }
         catch (Exception ex)
         {

@@ -5,6 +5,7 @@ using Convoy.Service.Interfaces;
 using Convoy.Service.Services;
 using Convoy.Service.Services.SmsProviders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -40,7 +41,13 @@ builder.Services.AddHttpClient<SmsFlySender>();
 builder.Services.AddHttpClient<SayqalSender>();
 
 // Services
-builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddScoped<ILocationService>(sp =>
+{
+    var locationRepo = sp.GetRequiredService<ILocationRepository>();
+    var logger = sp.GetRequiredService<ILogger<LocationService>>();
+    var hubContext = sp.GetService<IHubContext<Convoy.Api.Hubs.LocationHub>>();
+    return new LocationService(locationRepo, logger, hubContext);
+});
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
@@ -74,8 +81,27 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Controllers
-builder.Services.AddControllers();
+// SignalR
+builder.Services.AddSignalR();
+
+// CORS for SignalR
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
+// Controllers with snake_case JSON serialization
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = new Convoy.Api.Helpers.SnakeCaseNamingPolicy();
+        options.JsonSerializerOptions.DictionaryKeyPolicy = new Convoy.Api.Helpers.SnakeCaseNamingPolicy();
+    });
 
 // Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -128,9 +154,15 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// CORS middleware
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// SignalR Hub endpoint
+app.MapHub<Convoy.Api.Hubs.LocationHub>("/hubs/location");
 
 app.Run();
