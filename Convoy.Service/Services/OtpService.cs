@@ -13,6 +13,7 @@ public class OtpService : IOtpService
     private readonly ILogger<OtpService> _logger;
     private readonly int _otpExpirationMinutes;
     private readonly int _otpLength;
+    private readonly int _otpRateLimitSeconds;
 
     public OtpService(AppDbConText context, IConfiguration configuration, ILogger<OtpService> logger)
     {
@@ -20,6 +21,7 @@ public class OtpService : IOtpService
         _logger = logger;
         _otpExpirationMinutes = int.TryParse(configuration["Auth:OtpExpirationMinutes"], out var expMin) ? expMin : 5;
         _otpLength = int.TryParse(configuration["Auth:OtpLength"], out var len) ? len : 6;
+        _otpRateLimitSeconds = int.TryParse(configuration["Auth:OtpRateLimitSeconds"], out var rateLimit) ? rateLimit : 60;
     }
 
     public async Task<string> GenerateOtpAsync(string phoneNumber)
@@ -28,6 +30,27 @@ public class OtpService : IOtpService
         var existingOtps = await _context.OtpCodes
             .Where(o => o.PhoneNumber == phoneNumber && !o.IsUsed)
             .ToListAsync();
+
+        // RATE LIMITING: Agar 0 bo'lmasa va oxirgi OTP configured seconds ichida jo'natilgan bo'lsa, xatolik qaytarish
+        if (_otpRateLimitSeconds > 0)
+        {
+            var lastOtp = existingOtps.OrderByDescending(o => o.CreatedAt).FirstOrDefault();
+            if (lastOtp != null)
+            {
+                var timeSinceLastOtp = DateTime.UtcNow - lastOtp.CreatedAt;
+                if (timeSinceLastOtp.TotalSeconds < _otpRateLimitSeconds)
+                {
+                    var waitSeconds = (int)(_otpRateLimitSeconds - timeSinceLastOtp.TotalSeconds);
+                    _logger.LogWarning("OTP rate limit exceeded for {Phone}. Last OTP sent {Seconds} seconds ago. Wait {Wait} more seconds",
+                        phoneNumber, (int)timeSinceLastOtp.TotalSeconds, waitSeconds);
+                    throw new InvalidOperationException($"Iltimos {waitSeconds} soniya kuting va qayta urinib ko'ring");
+                }
+            }
+        }
+        else
+        {
+            _logger.LogInformation("OTP rate limiting is DISABLED (OtpRateLimitSeconds = 0)");
+        }
 
         foreach (var otp in existingOtps)
         {

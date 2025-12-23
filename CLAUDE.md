@@ -340,7 +340,10 @@ If you need another partitioned table:
   - `mobilephone`: Phone number
   - `worker_guid`, `branch_guid`, `branch_name`, `position_id`: Worker metadata
 - **Token configuration**: `Jwt:SecretKey`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpirationHours` in appsettings
-- **OTP configuration**: `Auth:OtpLength` (default: 4), `Auth:OtpExpirationMinutes` (default: 1)
+- **OTP configuration**:
+  - `Auth:OtpLength` (default: 4) - OTP kod uzunligi
+  - `Auth:OtpExpirationMinutes` (default: 1) - OTP kodning amal qilish muddati (daqiqalarda)
+  - `Auth:OtpRateLimitSeconds` (default: 60) - Bir telefon raqam uchun OTP jo'natish oralig'i (soniyalarda, 0 = o'chirish)
 
 ### SMS Provider Configuration
 
@@ -369,6 +372,43 @@ If you need another partitioned table:
 - Database host: `postgres` (service name)
 - Default password: `Danger124` (change for production)
 - Environment variable: `ConnectionStrings__DefaultConnection`
+
+## OTP Rate Limiting Quick Reference
+
+### Development/Testing (No Rate Limit)
+```json
+// appsettings.Development.json
+{
+  "Auth": {
+    "OtpRateLimitSeconds": 0  // Disable rate limiting
+  }
+}
+```
+
+### Production (Recommended Settings)
+```json
+// appsettings.json
+{
+  "Auth": {
+    "OtpRateLimitSeconds": 60  // 1 minute between requests
+  }
+}
+```
+
+### Custom Settings
+```json
+{
+  "Auth": {
+    "OtpRateLimitSeconds": 30   // 30 seconds
+    // or
+    "OtpRateLimitSeconds": 120  // 2 minutes
+  }
+}
+```
+
+**Note**: Setting to `0` completely disables rate limiting. Use only for temporary development/testing purposes.
+
+---
 
 ## Common Patterns
 
@@ -534,6 +574,14 @@ builder.Services.AddHostedService<YourService>();
   - Both failed → Check configuration keys and network connectivity
 - **OTP expired**: Default 1 minute, check `Auth:OtpExpirationMinutes` config
 - **Wrong OTP**: OTP is one-time use, request new one if failed
+- **Rate limit exceeded**: User trying to request OTP too frequently
+  - Default: 60 seconds between requests for same phone number
+  - Error message: "Iltimos N soniya kuting va qayta urinib ko'ring"
+  - Configure via `Auth:OtpRateLimitSeconds`:
+    - Set to `60` (recommended for production) - 1 minute wait time
+    - Set to `30` - 30 seconds wait time
+    - Set to `0` - **DISABLE** rate limiting (for development/testing only, NOT recommended for production)
+  - When disabled, logs will show: "OTP rate limiting is DISABLED"
 - **Development testing**: OTP codes logged to console (search for "DEVELOPMENT" in logs)
 - **Phone number format**: SmsFly automatically formats phone numbers (9 digits → adds 998 prefix)
 
@@ -587,7 +635,8 @@ builder.Services.AddHostedService<YourService>();
   "Auth": {
     "AllowedPositionIds": "86",  // Comma-separated position IDs, empty = all positions
     "OtpLength": 4,
-    "OtpExpirationMinutes": 1
+    "OtpExpirationMinutes": 1,
+    "OtpRateLimitSeconds": 60  // Minimum seconds between OTP requests for same phone number
   },
   "PhpApi": {
     "GlobalPathForSupport": "https://your-php-api.com/api/",
