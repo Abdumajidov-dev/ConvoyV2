@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **SignalR**: Real-time GPS location broadcasting to connected clients
 - **JWT Authentication**: OTP-based authentication with external PHP API integration
 - **Dual SMS Providers**: Failover SMS system (SmsFly → Sayqal)
+- **snake_case JSON**: ALL API endpoints and JSON fields use snake_case naming convention
 
 ## Build & Run Commands
 
@@ -178,12 +179,13 @@ Convoy/
 - Event name: `LocationUpdated` with `LocationResponseDto` payload
 
 **7. Authentication Flow (OTP + JWT)**
-- **Step 1 - Verify Phone**: `POST /api/auth/verify-number` → Validates user exists in external PHP API and checks allowed position IDs
-- **Step 2 - Send OTP**: `POST /api/auth/send-otp` → Generates 6-digit code, sends via SMS (SmsFly → Sayqal failover)
-- **Step 3 - Verify OTP**: `POST /api/auth/verify-otp` → Validates code, returns JWT token
+- **Step 1 - Verify Phone**: `POST /api/auth/verify_number` → Validates user exists in external PHP API and checks allowed position IDs
+- **Step 2 - Send OTP**: `POST /api/auth/send_otp` → Generates OTP code, sends via SMS (SmsFly → Sayqal failover)
+- **Step 3 - Verify OTP**: `POST /api/auth/verify_otp` → Validates code, returns JWT token
 - **Step 4 - Use Token**: Include `Authorization: Bearer {token}` header in subsequent requests
+- **Step 5 - Get User Info**: `GET /api/auth/me` → Returns current user info from JWT token (requires authentication)
 - Worker data cached in-memory during auth flow (phone number → PhpWorkerDto)
-- OTP codes stored in `otp_codes` table (EF Core), auto-expire after 5 minutes (configurable)
+- OTP codes stored in `otp_codes` table (EF Core), auto-expire after configured minutes (default: 1 minute)
 
 **8. SMS Provider Failover Strategy**
 - `CompositeSmsService` implements `ISmsService` interface
@@ -191,6 +193,29 @@ Convoy/
 - Backup: `SayqalSender` (attempts if SmsFly fails)
 - Both providers use HttpClient with configured base URLs and credentials from `appsettings.json`
 - Logs provider failures for monitoring
+
+**9. API Response Pattern (ServiceResult + ApiResponse)**
+- **Service Layer**: Returns `ServiceResult<T>` or custom result wrappers with `Status`, `Message`, `Data` properties
+- **Controller Layer**: Converts service results to standardized JSON format:
+  ```json
+  {
+    "status": true/false,
+    "message": "User-friendly message",
+    "data": { ... } or null
+  }
+  ```
+- **LocationController**: Uses `ServiceResult<T>` pattern (see `SERVICE_RESULT_PATTERN.md`)
+- **AuthController**: Uses custom response format with `Status`, `Message`, `Data` properties
+- **Exception handling**: Services handle business logic errors, controllers handle HTTP status codes
+- Controllers should map service responses to consistent HTTP status codes (200 OK, 400 Bad Request, 500 Internal Server Error)
+
+**10. snake_case JSON Naming Convention**
+- **CRITICAL**: ALL API endpoints use snake_case: `/api/auth/verify_number`, `/api/locations/user_batch`
+- **CRITICAL**: ALL JSON fields use snake_case: `user_id`, `recorded_at`, `phone_number`, `activity_type`
+- **CRITICAL**: ALL query parameters use snake_case: `?start_date=...&end_date=...`
+- Configured via `JsonNamingPolicy.SnakeCaseLower` in `Program.cs` AddControllers() options
+- Dart/Flutter clients can use property names directly without manual mapping
+- See `SNAKE_CASE_API_GUIDE.md` for complete API contract
 
 ## Database Schema
 
@@ -266,13 +291,20 @@ If you need another partitioned table:
 - **Swagger UI**: Available at `/swagger` endpoint (dev environment only)
   - JWT authentication configured in Swagger (use "Authorize" button)
   - SignalR endpoints documented via `SignalRTestController`
-- **Controller pattern**: Follow `LocationController` for RESTful conventions
+- **Controller pattern**: Follow these strict rules:
+  1. Controllers receive `ServiceResult<T>` from services
+  2. Map to standardized JSON: `{ status: bool, message: string, data: T }`
+  3. Return `StatusCode(result.StatusCode, responseObject)`
+  4. DO NOT handle exceptions - services handle them
+  5. Example pattern in `LocationController` and `AuthController`
 - **Authentication**: Use `[Authorize]` attribute for protected endpoints
-  - Public endpoints: `/api/auth/*` (verify-number, send-otp, verify-otp)
-  - Protected endpoints: All others require `Authorization: Bearer {token}` header
+  - Public endpoints: `/api/auth/verify_number`, `/api/auth/send_otp`, `/api/auth/verify_otp`
+  - Protected endpoints: `/api/auth/me` and all location endpoints require `Authorization: Bearer {token}` header
 - **DTO mapping**: Keep in Service layer, not in Controllers
 - **Logging**: Use ILogger injected into services (already configured)
-- **Error handling**: Let exceptions bubble up for now (global exception handler not implemented)
+- **JSON naming**: MUST use snake_case for all endpoints, query params, and JSON fields
+  - Routes: `[HttpPost("verify_number")]` NOT `[HttpPost("verifyNumber")]`
+  - DTOs: Use `[JsonProperty("phone_number")]` attribute for snake_case serialization
 
 ### SignalR Development
 
@@ -303,23 +335,24 @@ If you need another partitioned table:
   - Example: `"2,3,5"` allows only workers with these position IDs
   - Empty = all positions allowed
 - **JWT Token claims**:
-  - `nameid`: Worker ID
+  - `user_id`: Worker ID (primary identifier)
   - `unique_name`: Worker name
   - `mobilephone`: Phone number
   - `worker_guid`, `branch_guid`, `branch_name`, `position_id`: Worker metadata
 - **Token configuration**: `Jwt:SecretKey`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpirationHours` in appsettings
-- **OTP configuration**: `Auth:OtpLength` (default: 6), `Auth:OtpExpirationMinutes` (default: 5)
+- **OTP configuration**: `Auth:OtpLength` (default: 4), `Auth:OtpExpirationMinutes` (default: 1)
 
 ### SMS Provider Configuration
 
 - **Composite pattern**: `CompositeSmsService` tries providers in order (failover)
 - **Provider 1 - SmsFly**:
-  - Config keys: `SmsFly:BaseUrl`, `SmsFly:AuthKey`, `SmsFly:Sender`
+  - Config path: `SmsProviders:SmsFly:ApiKey`, `SmsProviders:SmsFly:ApiUrl`
   - Used first, falls back to Sayqal if fails
 - **Provider 2 - Sayqal**:
-  - Config keys: `Sayqal:BaseUrl`, `Sayqal:Login`, `Sayqal:Password`
+  - Config path: `SmsProviders:Sayqal:UserName`, `SmsProviders:Sayqal:SecretKey`, `SmsProviders:Sayqal:ApiUrl`
   - Backup provider
 - **Development mode**: OTP codes logged to console with warning level (search logs for "DEVELOPMENT")
+- **HttpClient registration**: Both providers use `AddHttpClient<T>()` in DI container
 
 ## Connection String Configuration
 
@@ -362,21 +395,27 @@ hubConnection.on('LocationUpdated', (data) => {
 ```csharp
 // Client-side flow
 // Step 1: Verify phone exists
-POST /api/auth/verify-number
-{ "phoneNumber": "+998901234567" }
-// Response: { success: true, data: { workerId, workerName, ... } }
+POST /api/auth/verify_number
+{ "phone_number": "+998901234567" }
+// Response: { status: true, message: "...", data: { worker_id, worker_name, ... } }
 
 // Step 2: Request OTP
-POST /api/auth/send-otp
-{ "phoneNumber": "+998901234567" }
+POST /api/auth/send_otp
+{ "phone_number": "+998901234567" }
 // SMS sent via SmsFly or Sayqal
+// Response: { status: true, message: "OTP sent", data: null }
 
 // Step 3: Verify OTP and get JWT
-POST /api/auth/verify-otp
-{ "phoneNumber": "+998901234567", "otpCode": "123456" }
-// Response: { success: true, data: { token: "eyJhbGc..." } }
+POST /api/auth/verify_otp
+{ "phone_number": "+998901234567", "otp_code": "1234" }
+// Response: { status: true, message: "...", data: { token: "eyJhbGc..." } }
 
-// Step 4: Use token
+// Step 4: Use token to get user info
+GET /api/auth/me
+Headers: Authorization: Bearer eyJhbGc...
+// Response: { status: true, message: "...", data: { user_id, name, phone, ... } }
+
+// Step 5: Access protected endpoints
 GET /api/locations/user/123
 Headers: Authorization: Bearer eyJhbGc...
 ```
@@ -399,10 +438,31 @@ const string sql = @"
     ORDER BY recorded_at DESC";
 ```
 
-### Adding New Service
+### Adding New Service with ServiceResult Pattern
 
 1. Create interface in `Convoy.Service/Interfaces/`
+   ```csharp
+   public interface IYourService
+   {
+       Task<ServiceResult<YourDto>> GetDataAsync(int id);
+   }
+   ```
 2. Implement in `Convoy.Service/Services/`
+   ```csharp
+   public async Task<ServiceResult<YourDto>> GetDataAsync(int id)
+   {
+       try {
+           var data = await _repository.GetAsync(id);
+           if (data == null)
+               return ServiceResult<YourDto>.NotFound("Data topilmadi");
+
+           return ServiceResult<YourDto>.Ok(data, "Ma'lumot olindi");
+       } catch (Exception ex) {
+           _logger.LogError(ex, "Error getting data");
+           return ServiceResult<YourDto>.ServerError("Xatolik yuz berdi");
+       }
+   }
+   ```
 3. Register in `Program.cs`: `builder.Services.AddScoped<IYourService, YourService>()`
 4. **For services needing SignalR**: Inject `IHubContext<LocationHub>` as `object?` (cast to `dynamic` when using)
 
@@ -472,9 +532,10 @@ builder.Services.AddHostedService<YourService>();
 - **OTP not received**: Check logs for SMS provider failures
   - SmsFly failed → Should automatically try Sayqal
   - Both failed → Check configuration keys and network connectivity
-- **OTP expired**: Default 5 minutes, check `Auth:OtpExpirationMinutes` config
+- **OTP expired**: Default 1 minute, check `Auth:OtpExpirationMinutes` config
 - **Wrong OTP**: OTP is one-time use, request new one if failed
 - **Development testing**: OTP codes logged to console (search for "DEVELOPMENT" in logs)
+- **Phone number format**: SmsFly automatically formats phone numbers (9 digits → adds 998 prefix)
 
 ### External PHP API Integration Issues
 - **User not found**: Verify phone number exists in PHP API database
@@ -489,15 +550,23 @@ builder.Services.AddHostedService<YourService>();
 - **Indexes**: Already created on `(user_id, recorded_at)` for common query patterns
 - **Connection pooling**: Handled by Npgsql/PostgreSQL automatically (min 0, max 100 by default)
 
-## File Locations
+## File Locations & Important Documentation
+
+### Critical Reference Documents (READ THESE FIRST)
+
+- **`SERVICE_RESULT_PATTERN.md`**: How services return results and controllers handle them - MANDATORY reading
+- **`API_RESPONSE_FORMAT.md`**: Standard API response format with complete examples for all endpoints
+- **`SNAKE_CASE_API_GUIDE.md`**: Complete guide to snake_case naming convention - CRITICAL for API consistency
+- **`SIGNALR-TESTING-GUIDE.md`**: Complete testing guide for SignalR real-time features
+- **`FLUTTER-SIGNALR-EXAMPLE.md`**: Flutter client implementation examples with encryption
+- **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end encryption implementation for sensitive data
+
+### Code & Scripts
 
 - **SQL scripts**: Root directory (`database-setup.sql`, `create-partitions.sql`)
 - **API examples**: `API-EXAMPLES.http` (REST Client format)
 - **Deployment docs**: `DOCKER-DEPLOYMENT.md`, `QUICK-START.md`, `SETUP.md`
 - **Batch scripts**: Windows: `*.bat`, Linux/Mac: `*.sh`
-- **SignalR documentation**:
-  - `SIGNALR-TESTING-GUIDE.md`: Complete testing guide for SignalR
-  - `FLUTTER-SIGNALR-EXAMPLE.md`: Flutter client implementation examples
 - **Configuration templates**: `appsettings.json`, `appsettings.Development.json`
 
 ## Critical Configuration Keys
@@ -507,35 +576,40 @@ builder.Services.AddHostedService<YourService>();
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=convoy_db;..."
+    "DefaultConnection": "Host=localhost;Port=5432;Database=convoy_db;Username=postgres;Password=YOUR_PASSWORD;Include Error Detail=true"
   },
   "Jwt": {
-    "SecretKey": "your-secret-key-min-32-chars",
+    "SecretKey": "your-256-bit-secret-key-here-make-it-long-and-secure-change-this-in-production",
     "Issuer": "ConvoyApi",
     "Audience": "ConvoyClients",
-    "ExpirationHours": 720
+    "ExpirationHours": 24
   },
   "Auth": {
-    "AllowedPositionIds": "2,3,5",  // Empty = all positions
-    "OtpLength": 6,
-    "OtpExpirationMinutes": 5
+    "AllowedPositionIds": "86",  // Comma-separated position IDs, empty = all positions
+    "OtpLength": 4,
+    "OtpExpirationMinutes": 1
   },
   "PhpApi": {
-    "BaseUrl": "https://your-php-api.com",
-    "VerifyUserEndpoint": "/api/verify-user/{0}"
+    "GlobalPathForSupport": "https://your-php-api.com/api/",
+    "Username": "login",
+    "Password": "password"
   },
-  "SmsFly": {
-    "BaseUrl": "https://smsfly.uz/api",
-    "AuthKey": "your-auth-key",
-    "Sender": "YourSender"
+  "SmsProviders": {
+    "SmsFly": {
+      "ApiKey": "your-api-key",
+      "ApiUrl": "https://api.smsfly.uz/send"
+    },
+    "Sayqal": {
+      "UserName": "your-username",
+      "SecretKey": "your-secret-key",
+      "ApiUrl": "https://routee.sayqal.uz/sms/TransmitSMS"
+    }
   },
-  "Sayqal": {
-    "BaseUrl": "https://sayqal.uz/api",
-    "Login": "your-login",
-    "Password": "your-password"
-  }
+  "DeploymentUrl": "https://your-deployment-url.com"
 }
 ```
+
+**IMPORTANT**: Configuration structure changed - SMS providers are nested under `SmsProviders` object, and PhpApi uses `GlobalPathForSupport` instead of `BaseUrl`.
 
 ### Environment-Specific Overrides
 
@@ -543,5 +617,151 @@ builder.Services.AddHostedService<YourService>();
 - **Docker**: Set via environment variables (double underscore notation):
   - `ConnectionStrings__DefaultConnection`
   - `Jwt__SecretKey`
-  - `PhpApi__BaseUrl`
+  - `PhpApi__GlobalPathForSupport`
+  - `SmsProviders__SmsFly__ApiKey`
 - **Production**: Use secrets management (Azure Key Vault, AWS Secrets Manager, etc.)
+
+---
+
+## Common Mistakes to Avoid
+
+### ❌ WRONG: Using camelCase in API
+
+```csharp
+// WRONG - camelCase endpoint
+[HttpPost("verifyNumber")]
+
+// WRONG - camelCase JSON property
+public class Dto {
+    public string PhoneNumber { get; set; }  // Will serialize as "phoneNumber"
+}
+```
+
+### ✅ CORRECT: Using snake_case everywhere
+
+```csharp
+// CORRECT - snake_case endpoint
+[HttpPost("verify_number")]
+
+// CORRECT - snake_case JSON property
+public class Dto {
+    [JsonProperty("phone_number")]
+    public string PhoneNumber { get; set; }  // Will serialize as "phone_number"
+}
+```
+
+### ❌ WRONG: Exposing raw exceptions to clients
+
+```csharp
+// WRONG - Leaking exception details
+[HttpGet]
+public async Task<IActionResult> Get()
+{
+    var data = await _service.GetData();  // May throw exception
+    return Ok(data);  // Exception bubbles up with stack trace
+}
+```
+
+### ✅ CORRECT: Proper exception handling with standardized responses
+
+```csharp
+// OPTION 1 - LocationController pattern (ServiceResult)
+public async Task<ServiceResult<DataDto>> GetData()
+{
+    try {
+        var data = await _repository.GetAsync();
+        return ServiceResult<DataDto>.Ok(data, "Success");
+    } catch (Exception ex) {
+        _logger.LogError(ex, "Error");
+        return ServiceResult<DataDto>.ServerError("Error occurred");
+    }
+}
+
+[HttpGet]
+public async Task<IActionResult> Get()
+{
+    var result = await _service.GetData();
+    return StatusCode(result.StatusCode, new {
+        status = result.Success,
+        message = result.Message,
+        data = result.Data
+    });
+}
+
+// OPTION 2 - AuthController pattern (try-catch in controller)
+[HttpPost("endpoint")]
+public async Task<IActionResult> DoSomething([FromBody] Request request)
+{
+    try {
+        var result = await _service.DoSomethingAsync(request);
+
+        var response = new {
+            status = result.Status,
+            message = result.Message,
+            data = result.Data
+        };
+
+        if (!result.Status)
+            return BadRequest(response);
+
+        return Ok(response);
+    } catch (Exception ex) {
+        _logger.LogError(ex, "Error in DoSomething");
+        return StatusCode(500, new {
+            status = false,
+            message = "Internal server error",
+            data = (object?)null
+        });
+    }
+}
+```
+
+### ❌ WRONG: Querying partitioned table without partition key
+
+```csharp
+// WRONG - Missing recorded_at filter (scans all partitions)
+SELECT * FROM locations WHERE user_id = @UserId
+```
+
+### ✅ CORRECT: Always include partition key in WHERE clause
+
+```csharp
+// CORRECT - Includes recorded_at for partition pruning
+SELECT * FROM locations
+WHERE user_id = @UserId
+  AND recorded_at >= @StartDate
+  AND recorded_at < @EndDate
+```
+
+### ❌ WRONG: Using EF migrations for partitioned tables
+
+```bash
+# WRONG - Don't use EF migrations for locations table
+dotnet ef migrations add AddColumnToLocations
+```
+
+### ✅ CORRECT: Modify partitioned tables via SQL scripts
+
+```sql
+-- CORRECT - Modify database-setup.sql and re-run
+ALTER TABLE locations ADD COLUMN new_field VARCHAR(100);
+```
+
+### ❌ WRONG: Inconsistent response format
+
+```csharp
+// WRONG - Different response formats
+return Ok(data);  // Returns just data
+return Ok(new { success = true, result = data });  // Different structure
+```
+
+### ✅ CORRECT: Always use standardized format
+
+```csharp
+// CORRECT - Consistent response format
+return StatusCode(result.StatusCode, new {
+    status = result.Success,
+    message = result.Message,
+    data = result.Data
+});
+```

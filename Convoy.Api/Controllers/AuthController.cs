@@ -2,6 +2,8 @@ using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Convoy.Api.Controllers;
 
@@ -28,17 +30,29 @@ public class AuthController : ControllerBase
         {
             var result = await _authService.VerifyNumberAsync(request.PhoneNumber);
 
+            var response = new
+            {
+                status = result.Status,
+                message = result.Message,
+                data = result.Data
+            };
+
             if (!result.Status)
             {
-                return BadRequest(new { error = result.Message });
+                return BadRequest(response);
             }
 
-            return Ok(result);
+            return Ok(response);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying phone number: {PhoneNumber}", request.PhoneNumber);
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Internal server error",
+                data = (object?)null
+            });
         }
     }
 
@@ -52,17 +66,29 @@ public class AuthController : ControllerBase
         {
             var result = await _authService.SendOtpAsync(request.PhoneNumber);
 
+            var response = new
+            {
+                status = result.Status,
+                message = result.Message,
+                data = result.Data
+            };
+
             if (!result.Status)
             {
-                return BadRequest(new { error = result.Message });
+                return BadRequest(response);
             }
 
-            return Ok(result);
+            return Ok(response);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending OTP to: {PhoneNumber}", request.PhoneNumber);
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Internal server error",
+                data = (object?)null
+            });
         }
     }
 
@@ -76,17 +102,29 @@ public class AuthController : ControllerBase
         {
             var result = await _authService.VerifyOtpAsync(request.PhoneNumber, request.OtpCode);
 
+            var response = new
+            {
+                status = result.Status,
+                message = result.Message,
+                data = result.Data
+            };
+
             if (!result.Status)
             {
-                return BadRequest(new { error = result.Message });
+                return BadRequest(response);
             }
 
-            return Ok(result);
+            return Ok(response);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying OTP for: {PhoneNumber}", request.PhoneNumber);
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Internal server error",
+                data = (object?)null
+            });
         }
     }
 
@@ -104,22 +142,39 @@ public class AuthController : ControllerBase
 
             if (string.IsNullOrEmpty(userIdClaim))
             {
-                return Unauthorized(new { error = "Invalid token" });
+                return Unauthorized(new
+                {
+                    status = false,
+                    message = "Invalid token",
+                    data = (object?)null
+                });
             }
 
             var result = await _authService.GetMeAsync(userIdClaim);
 
+            var response = new
+            {
+                status = result.Status,
+                message = result.Message,
+                data = result.Data
+            };
+
             if (!result.Status)
             {
-                return BadRequest(new { error = result.Message });
+                return BadRequest(response);
             }
 
-            return Ok(result);
+            return Ok(response);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting current user");
-            return StatusCode(500, new { error = "Internal server error" });
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Internal server error",
+                data = (object?)null
+            });
         }
     }
 }
@@ -127,16 +182,21 @@ public class AuthController : ControllerBase
 // Request DTOs
 public class VerifyNumberRequest
 {
+    [JsonProperty("phone_number")]
     public string PhoneNumber { get; set; } = string.Empty;
 }
 
 public class SendOtpRequest
 {
+    [JsonPropertyName("phone_number")]
     public string PhoneNumber { get; set; } = string.Empty;
 }
 
 public class VerifyOtpRequest
 {
+    [JsonProperty("phone_number")]
     public string PhoneNumber { get; set; } = string.Empty;
+
+    [JsonProperty("otp_code")]
     public string OtpCode { get; set; } = string.Empty;
 }
