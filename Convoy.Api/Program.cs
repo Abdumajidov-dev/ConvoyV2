@@ -1,3 +1,4 @@
+using Convoy.Api.Middleware;
 using Convoy.Data.DbContexts;
 using Convoy.Data.IRepositories;
 using Convoy.Data.Repositories;
@@ -53,6 +54,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ISmsService, CompositeSmsService>();
+builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 
 // Background services (ordering matters - DatabaseInitializer birinchi)
 builder.Services.AddHostedService<DatabaseInitializerService>();
@@ -156,6 +158,9 @@ app.UseHttpsRedirection();
 
 // CORS middleware
 app.UseCors("AllowAll");
+
+// Encryption middleware (request/response encryption)
+app.UseEncryption();
 
 app.UseAuthentication();
 app.UseAuthorization();

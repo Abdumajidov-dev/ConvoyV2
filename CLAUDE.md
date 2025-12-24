@@ -209,7 +209,23 @@ Convoy/
 - **Exception handling**: Services handle business logic errors, controllers handle HTTP status codes
 - Controllers should map service responses to consistent HTTP status codes (200 OK, 400 Bad Request, 500 Internal Server Error)
 
-**10. snake_case JSON Naming Convention**
+**10. End-to-End Encryption (AES-256-CBC)**
+- **Purpose**: Encrypt request/response data to prevent man-in-the-middle attacks and data interception
+- **Algorithm**: AES-256-CBC with PKCS7 padding
+- **Components**:
+  - `EncryptionService`: Core AES encryption/decryption service
+  - `EncryptionMiddleware`: Automatic request/response encryption middleware
+- **Configuration**: `Encryption:Enabled`, `Encryption:Key`, `Encryption:IV` in appsettings
+- **Request Format**: Raw Base64 encrypted string (e.g., `"t5oLfaFS3jSqrDuQB+eTIRI..."`)
+- **Response Format**: Raw Base64 encrypted string (e.g., `"muMA0bv2XvoawCPU1xd7c9J9..."`)
+- **Content-Type**: `text/plain` for encrypted requests/responses
+- **Key Generation**: Use `generate-encryption-keys.ps1` (Windows) or `generate-encryption-keys.sh` (Linux/Mac)
+- **Flutter Integration**: Use `encrypt` package with same Key/IV as backend
+- **Development Mode**: Set `Encryption:Enabled: false` to disable encryption for testing
+- **Security**: NEVER commit encryption keys to Git, use environment variables in production
+- **Note**: No wrapper object - direct encrypted string for maximum security
+
+**11. snake_case JSON Naming Convention**
 - **CRITICAL**: ALL API endpoints use snake_case: `/api/auth/verify_number`, `/api/locations/user_batch`
 - **CRITICAL**: ALL JSON fields use snake_case: `user_id`, `recorded_at`, `phone_number`, `activity_type`
 - **CRITICAL**: ALL query parameters use snake_case: `?start_date=...&end_date=...`
@@ -606,8 +622,8 @@ builder.Services.AddHostedService<YourService>();
 - **`API_RESPONSE_FORMAT.md`**: Standard API response format with complete examples for all endpoints
 - **`SNAKE_CASE_API_GUIDE.md`**: Complete guide to snake_case naming convention - CRITICAL for API consistency
 - **`SIGNALR-TESTING-GUIDE.md`**: Complete testing guide for SignalR real-time features
-- **`FLUTTER-SIGNALR-EXAMPLE.md`**: Flutter client implementation examples with encryption
-- **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end encryption implementation for sensitive data
+- **`FLUTTER-SIGNALR-EXAMPLE.md`**: Flutter client implementation examples
+- **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end AES-256 encryption implementation for Flutter (request/response encryption)
 
 ### Code & Scripts
 
@@ -615,6 +631,7 @@ builder.Services.AddHostedService<YourService>();
 - **API examples**: `API-EXAMPLES.http` (REST Client format)
 - **Deployment docs**: `DOCKER-DEPLOYMENT.md`, `QUICK-START.md`, `SETUP.md`
 - **Batch scripts**: Windows: `*.bat`, Linux/Mac: `*.sh`
+- **Encryption key generators**: `generate-encryption-keys.ps1` (Windows), `generate-encryption-keys.sh` (Linux/Mac)
 - **Configuration templates**: `appsettings.json`, `appsettings.Development.json`
 
 ## Critical Configuration Keys
@@ -654,7 +671,12 @@ builder.Services.AddHostedService<YourService>();
       "ApiUrl": "https://routee.sayqal.uz/sms/TransmitSMS"
     }
   },
-  "DeploymentUrl": "https://your-deployment-url.com"
+  "DeploymentUrl": "https://your-deployment-url.com",
+  "Encryption": {
+    "Enabled": false,  // Set to true in production
+    "Key": "GENERATE_WITH_generate-encryption-keys.ps1",  // Base64 encoded 32-byte key
+    "IV": "GENERATE_WITH_generate-encryption-keys.ps1"    // Base64 encoded 16-byte IV
+  }
 }
 ```
 

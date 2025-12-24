@@ -38,6 +38,13 @@ bld/
 .env.local
 .env.production
 
+# Encryption keys (NEVER commit these!)
+encryption-keys*.txt
+appsettings.Production.json
+**/appsettings.*.json
+!**/appsettings.json
+!**/appsettings.Development.json
+
 # Database
 *.db
 *.sqlite

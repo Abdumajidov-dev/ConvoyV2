@@ -23,7 +23,21 @@
       "Bash(dotnet remove:*)",
       "Bash(timeout /t 8 /nobreak)",
       "Bash(cmd.exe /c dir /b Convoy.ApiControllers)",
-      "Bash(cmd.exe /c dir /b Convoy.ApiControllers 2)"
+      "Bash(cmd.exe /c dir /b Convoy.ApiControllers 2)",
+      "Bash(cmd.exe /c type nul)",
+      "Bash(FLUTTER_ENCRYPTION_GUIDE.md)",
+      "Bash(powershell -Command \"New-Item -Path ''FLUTTER_ENCRYPTION_GUIDE.md'' -ItemType File -Force\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File generate-encryption-keys.ps1)",
+      "Bash(python test_encryption.py:*)",
+      "Bash(pip install:*)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 5\")",
+      "Bash(test_result.txt)",
+      "Bash(python test_encryption_urlsafe.py:*)",
+      "Bash(python test_verify_number.py:*)",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 8\")"
     ]
   }
 }
