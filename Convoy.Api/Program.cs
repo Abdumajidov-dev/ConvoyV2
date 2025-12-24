@@ -159,8 +159,11 @@ app.UseHttpsRedirection();
 // CORS middleware
 app.UseCors("AllowAll");
 
-// Encryption middleware (request/response encryption)
+// Encryption middleware (MUST run BEFORE routing to decrypt endpoint)
 app.UseEncryption();
+
+// Explicit routing (allows encryption middleware to change path before routing)
+app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();

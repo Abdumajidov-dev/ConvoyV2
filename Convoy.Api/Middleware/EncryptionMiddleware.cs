@@ -57,6 +57,12 @@ public class EncryptionMiddleware
 
     private async Task DecryptRequestAsync(HttpContext context, IEncryptionService encryptionService)
     {
+        // ✅ YANGI: Endpoint'ni decrypt qilish (header'lardan oldin!)
+        DecryptEndpoint(context, encryptionService);
+
+        // ✅ YANGI: Header'larni decrypt qilish
+        DecryptHeaders(context, encryptionService);
+
         context.Request.EnableBuffering();
 
         using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true);
@@ -182,6 +188,229 @@ public class EncryptionMiddleware
             // Xatolik bo'lsa, original response ni qaytarish
             context.Response.Body.Seek(0, SeekOrigin.Begin);
             await context.Response.Body.CopyToAsync(originalBodyStream);
+        }
+    }
+
+    /// <summary>
+    /// Shifrlangan endpoint'ni decrypt qilish va path'ni o'zgartirish
+    /// </summary>
+    private void DecryptEndpoint(HttpContext context, IEncryptionService encryptionService)
+    {
+        if (!context.Request.Headers.ContainsKey("encrypted-endpoint"))
+        {
+            // Agar encrypted-endpoint yo'q bo'lsa, oddiy request
+            return;
+        }
+
+        try
+        {
+            var encryptedEndpoint = context.Request.Headers["encrypted-endpoint"].ToString();
+
+            if (string.IsNullOrWhiteSpace(encryptedEndpoint))
+            {
+                _logger.LogWarning("encrypted-endpoint header is empty");
+                return;
+            }
+
+            _logger.LogInformation("🔐 Attempting to decrypt endpoint. Length: {Length}", encryptedEndpoint.Length);
+            _logger.LogInformation("📍 Current request path BEFORE decrypt: {Path}", context.Request.Path);
+
+            // Decrypt qilish
+            var decryptedEndpoint = encryptionService.Decrypt(encryptedEndpoint);
+
+            _logger.LogInformation("✅ Endpoint decrypted: '{Endpoint}'", decryptedEndpoint);
+            _logger.LogInformation("📏 Decrypted endpoint length: {Length}", decryptedEndpoint.Length);
+            _logger.LogInformation("🔍 Decrypted endpoint starts with '/': {StartsWithSlash}", decryptedEndpoint.StartsWith("/"));
+
+            // Path'ni yangilash
+            // ASP.NET Core'da Path read-only, shuning uchun PathBase + Path kombinatsiyasidan foydalanamiz
+            // Yoki request feature'larini to'g'ridan-to'g'ri o'zgartiramiz
+
+            var pathFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpRequestFeature>();
+            if (pathFeature != null)
+            {
+                
+                // Agar endpoint "/" bilan boshlanmasa, qo'shamiz
+                var newPath = decryptedEndpoint.StartsWith("/") ? decryptedEndpoint : $"/api/{decryptedEndpoint}";
+
+                _logger.LogInformation("🔄 Changing path from '{OldPath}' to '{NewPath}'",
+                    context.Request.Path, newPath);
+                _logger.LogInformation("📍 RawTarget BEFORE: '{RawTarget}'", pathFeature.RawTarget);
+                _logger.LogInformation("📍 Path BEFORE: '{Path}'", pathFeature.Path);
+
+                pathFeature.RawTarget = newPath;
+                pathFeature.Path = newPath;
+                context.Request.Path = newPath;
+
+                _logger.LogInformation("📍 RawTarget AFTER: '{RawTarget}'", pathFeature.RawTarget);
+                _logger.LogInformation("📍 Path AFTER: '{Path}'", pathFeature.Path);
+                _logger.LogInformation("📍 context.Request.Path AFTER: '{Path}'", context.Request.Path);
+                _logger.LogInformation("✅ Path changed successfully to: {Path}", context.Request.Path);
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ Could not get IHttpRequestFeature to change path");
+            }
+
+            // encrypted-endpoint header'ni o'chirish (endi kerak emas)
+            context.Request.Headers.Remove("encrypted-endpoint");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Failed to decrypt endpoint");
+        }
+    }
+
+    /// <summary>
+    /// Shifrlangan header'larni decrypt qilish
+    /// </summary>
+    private void DecryptHeaders(HttpContext context, IEncryptionService encryptionService)
+    {
+        // ✅ YANGI FORMAT: encrypted-headers (bitta header'da barcha ma'lumotlar)
+        if (context.Request.Headers.ContainsKey("encrypted-headers"))
+        {
+            DecryptBulkHeaders(context, encryptionService);
+            return;
+        }
+
+        // ✅ ESKI FORMAT: Alohida header'lar (backward compatibility)
+        DecryptIndividualHeaders(context, encryptionService);
+    }
+
+    /// <summary>
+    /// Bitta encrypted-headers dan barcha header'larni yechish
+    /// </summary>
+    private void DecryptBulkHeaders(HttpContext context, IEncryptionService encryptionService)
+    {
+        try
+        {
+            var encryptedHeaders = context.Request.Headers["encrypted-headers"].ToString();
+
+            if (string.IsNullOrWhiteSpace(encryptedHeaders))
+            {
+                _logger.LogWarning("encrypted-headers header is empty");
+                return;
+            }
+
+            _logger.LogInformation("🔐 Attempting to decrypt bulk headers. Length: {Length}", encryptedHeaders.Length);
+
+            // Decrypt qilish
+            var decryptedJson = encryptionService.Decrypt(encryptedHeaders);
+
+            _logger.LogInformation("✅ Bulk headers decrypted successfully");
+
+            // JSON parse qilish - JsonElement ishlatamiz chunki ba'zi value'lar object bo'lishi mumkin
+            var headersDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(decryptedJson);
+
+            if (headersDict == null || headersDict.Count == 0)
+            {
+                _logger.LogWarning("Decrypted headers JSON is empty or invalid");
+                return;
+            }
+
+            _logger.LogInformation("📦 Found {Count} headers in encrypted-headers", headersDict.Count);
+
+            // Har bir header'ni request'ga qo'shish
+            foreach (var kvp in headersDict)
+            {
+                var headerName = kvp.Key;
+
+                // JsonElement'ni string'ga convert qilish
+                // Agar object yoki array bo'lsa, JSON string sifatida saqlanadi
+                string headerValue;
+                if (kvp.Value.ValueKind == JsonValueKind.String)
+                {
+                    headerValue = kvp.Value.GetString() ?? "";
+                }
+                else if (kvp.Value.ValueKind == JsonValueKind.Object || kvp.Value.ValueKind == JsonValueKind.Array)
+                {
+                    // Object yoki array bo'lsa, JSON string qilamiz
+                    headerValue = JsonSerializer.Serialize(kvp.Value);
+                }
+                else
+                {
+                    // Boshqa type'lar (number, boolean, null)
+                    headerValue = kvp.Value.ToString();
+                }
+
+                // Agar header allaqachon mavjud bo'lsa, o'chirish
+                if (context.Request.Headers.ContainsKey(headerName))
+                {
+                    context.Request.Headers.Remove(headerName);
+                }
+
+                // Yangi header qo'shish
+                context.Request.Headers.Append(headerName, headerValue);
+
+                _logger.LogInformation("  ✅ Added header: {Name} = {Value}", headerName,
+                    headerValue.Length > 50 ? headerValue.Substring(0, 50) + "..." : headerValue);
+            }
+
+            // encrypted-headers'ni o'chirish (kerak emas endi)
+            context.Request.Headers.Remove("encrypted-headers");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Failed to decrypt bulk headers");
+        }
+    }
+
+    /// <summary>
+    /// Alohida header'larni decrypt qilish (eski format)
+    /// </summary>
+    private void DecryptIndividualHeaders(HttpContext context, IEncryptionService encryptionService)
+    {
+        // Decrypt qilinadigan header nomlari
+        var headersToDecrypt = new[] { "device-info", "Authorization", "X-Custom-Data" };
+
+        foreach (var headerName in headersToDecrypt)
+        {
+            if (!context.Request.Headers.ContainsKey(headerName))
+                continue;
+
+            var encryptedValue = context.Request.Headers[headerName].ToString();
+
+            // Bo'sh yoki juda qisqa bo'lsa skip
+            if (string.IsNullOrWhiteSpace(encryptedValue) || encryptedValue.Length < 20)
+                continue;
+
+            // Authorization header "Bearer " prefixi bilan boshlanishi mumkin
+            var valueToDecrypt = encryptedValue;
+            var hasBearer = false;
+
+            if (headerName == "Authorization" && encryptedValue.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                valueToDecrypt = encryptedValue.Substring(7); // "Bearer " ni olib tashlash
+                hasBearer = true;
+            }
+
+            try
+            {
+                _logger.LogInformation("🔐 Attempting to decrypt header: {Header}", headerName);
+
+                // Decrypt qilish
+                var decryptedValue = encryptionService.Decrypt(valueToDecrypt);
+
+                _logger.LogInformation("✅ Header decrypted: {Header} = {Value}", headerName, decryptedValue);
+
+                // Header'ni yangilash
+                context.Request.Headers.Remove(headerName);
+
+                // Authorization uchun Bearer qayta qo'shish
+                if (hasBearer)
+                {
+                    context.Request.Headers.Append(headerName, $"Bearer {decryptedValue}");
+                }
+                else
+                {
+                    context.Request.Headers.Append(headerName, decryptedValue);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "⚠️ Failed to decrypt header: {Header}, keeping original value", headerName);
+                // Decrypt qilib bo'lmasa, original qiymatni qoldirish
+            }
         }
     }
 }

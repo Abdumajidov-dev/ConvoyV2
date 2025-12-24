@@ -1,8 +1,12 @@
-# Flutter Encryption Fix - URL-Safe Base64
+# Flutter Encryption Fix - URL-Safe Base64 + Header Encryption
 
 ## Muammo
 
 Flutter'dan shifrlangan ma'lumot yuborilganda backend **415 Unsupported Media Type** yoki **decryption error** qaytarayapti.
+
+**YANGI**: Header'lar ham shifrlangan holda yuboriladi (`device-info`, `Authorization`).
+
+**Qo'shimcha qo'llanma**: `HEADER_ENCRYPTION_GUIDE.md` faylini o'qing.
 
 **Sababi**: Standard Base64 encoding `+` va `/` belgilarini ishlatadi. HTTP request'larda bu belgilar buziladi:
 - `+` → space (bo'sh joy) ga aylanadi

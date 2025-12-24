@@ -37,7 +37,9 @@
       "Bash(test_result.txt)",
       "Bash(python test_encryption_urlsafe.py:*)",
       "Bash(python test_verify_number.py:*)",
-      "Bash(powershell -Command \"Start-Sleep -Seconds 8\")"
+      "Bash(powershell -Command \"Start-Sleep -Seconds 8\")",
+      "Bash(python:*)",
+      "Bash(powershell:*)"
     ]
   }
 }
