@@ -12,11 +12,65 @@ public class EncryptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<EncryptionMiddleware> _logger;
+    private readonly IConfiguration _configuration;
 
-    public EncryptionMiddleware(RequestDelegate next, ILogger<EncryptionMiddleware> logger)
+    public EncryptionMiddleware(
+        RequestDelegate next,
+        ILogger<EncryptionMiddleware> logger,
+        IConfiguration configuration)
     {
         _next = next;
         _logger = logger;
+        _configuration = configuration;
+    }
+
+    /// <summary>
+    /// Route encryption'dan excluded ekanligini tekshirish
+    /// appsettings.json dan Encryption:ExcludedRoutes'ni o'qiydi
+    /// </summary>
+    private bool IsExcludedRoute(string path)
+    {
+        // appsettings.json'dan excluded routes'ni olish
+        var excludedRoutes = _configuration.GetSection("Encryption:ExcludedRoutes").Get<string[]>();
+
+        if (excludedRoutes == null || excludedRoutes.Length == 0)
+        {
+            // Default excluded routes (agar appsettings'da bo'lmasa)
+            excludedRoutes = new[]
+            {
+                "/swagger",
+                "/swagger/*",
+                "/health",
+                "/hubs/*"
+            };
+        }
+
+        foreach (var pattern in excludedRoutes)
+        {
+            // Exact match
+            if (pattern.Equals(path, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Wildcard pattern match
+            if (pattern.EndsWith("/*"))
+            {
+                var prefix = pattern[..^2]; // Remove "/*"
+                if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            else if (pattern.Contains("*"))
+            {
+                // Advanced wildcard matching
+                var regex = new System.Text.RegularExpressions.Regex(
+                    "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*") + "$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
+                if (regex.IsMatch(path))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task InvokeAsync(HttpContext context, IEncryptionService encryptionService)
@@ -24,6 +78,14 @@ public class EncryptionMiddleware
         if (!encryptionService.IsEnabled)
         {
             // Encryption o'chirilgan bo'lsa, oddiy request/response
+            await _next(context);
+            return;
+        }
+
+        // Ba'zi route'lar encryption'dan excluded
+        if (IsExcludedRoute(context.Request.Path))
+        {
+            _logger.LogDebug("Route {Path} excluded from encryption", context.Request.Path);
             await _next(context);
             return;
         }

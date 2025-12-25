@@ -15,15 +15,18 @@ public class LocationService : ILocationService
     private readonly ILocationRepository _locationRepository;
     private readonly ILogger<LocationService> _logger;
     private readonly object? _locationHubContext;
+    private readonly ITelegramService? _telegramService;
 
     public LocationService(
         ILocationRepository locationRepository,
         ILogger<LocationService> logger,
-        object? locationHubContext = null)
+        object? locationHubContext = null,
+        ITelegramService? telegramService = null)
     {
         _locationRepository = locationRepository;
         _logger = logger;
         _locationHubContext = locationHubContext;
+        _telegramService = telegramService;
     }
 
 
@@ -39,7 +42,6 @@ public class LocationService : ILocationService
                 return ServiceResult<IEnumerable<LocationResponseDto>>.BadRequest(
                     "Locations array bo'sh bo'lmasligi kerak");
             }
-
             // Vaqt bo'yicha sort qilish
             var sortedLocations = dto.Locations.OrderBy(l => l.RecordedAt).ToList();
 
@@ -119,6 +121,43 @@ public class LocationService : ILocationService
                     {
                         _logger.LogWarning(ex, "Failed to broadcast location via SignalR for UserId={UserId}", dto.UserId);
                     }
+                }
+            }
+
+            // Telegram kanalga xabar yuborish
+            if (_telegramService != null)
+            {
+                try
+                {
+                    // Bitta location bo'lsa
+                    if (responseDtos.Count == 1)
+                    {
+                        var loc = responseDtos[0];
+                        await _telegramService.SendLocationDataAsync(
+                            dto.UserId,
+                            $"User {dto.UserId}", // Agar user name kerak bo'lsa, dto'ga qo'shish kerak
+                            double.Parse( loc.Latitude.ToString()),
+                            double.Parse(loc.Longitude.ToString()),
+                            loc.RecordedAt
+                        );
+                    }
+                    // Ko'p location bo'lsa (bulk)
+                    else
+                    {
+                        var firstLoc = responseDtos.First();
+                        var lastLoc = responseDtos.Last();
+                        await _telegramService.SendBulkLocationDataAsync(
+                            dto.UserId,
+                            $"User {dto.UserId}",
+                            responseDtos.Count,
+                            firstLoc.RecordedAt,
+                            lastLoc.RecordedAt
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send Telegram notification for UserId={UserId}", dto.UserId);
                 }
             }
 

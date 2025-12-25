@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **PostgreSQL Partitioning**: Monthly partitioned `locations` table by `recorded_at` (format: `locations_MM_YYYY`) for efficient queries
 - **SignalR**: Real-time GPS location broadcasting to connected clients
 - **JWT Authentication**: OTP-based authentication with external PHP API integration
+- **Permission System**: Role-Based Access Control (RBAC) with granular permissions
 - **Dual SMS Providers**: Failover SMS system (SmsFly → Sayqal)
 - **snake_case JSON**: ALL API endpoints and JSON fields use snake_case naming convention
 
@@ -215,7 +216,11 @@ Convoy/
 - **Components**:
   - `EncryptionService`: Core AES encryption/decryption service
   - `EncryptionMiddleware`: Automatic request/response encryption middleware
-- **Configuration**: `Encryption:Enabled`, `Encryption:Key`, `Encryption:IV` in appsettings
+- **Configuration**: `Encryption:Enabled`, `Encryption:Key`, `Encryption:ExcludedRoutes` in appsettings
+- **Excluded Routes**: Ba'zi route'lar encryption'dan exclude qilinishi mumkin (e.g., `/api/locations`, `/swagger`)
+  - Configure via `Encryption:ExcludedRoutes` array in appsettings.json
+  - Wildcard support: `/api/locations/*` matches all routes starting with `/api/locations/`
+  - See `ENCRYPTION_EXCLUDED_ROUTES_GUIDE.md` for details
 - **Request Format**: Raw Base64 encrypted string (e.g., `"t5oLfaFS3jSqrDuQB+eTIRI..."`)
 - **Response Format**: Raw Base64 encrypted string (e.g., `"muMA0bv2XvoawCPU1xd7c9J9..."`)
 - **Content-Type**: `text/plain` for encrypted requests/responses
@@ -225,7 +230,23 @@ Convoy/
 - **Security**: NEVER commit encryption keys to Git, use environment variables in production
 - **Note**: No wrapper object - direct encrypted string for maximum security
 
-**11. snake_case JSON Naming Convention**
+**11. Telegram Bot Integration**
+- **Purpose**: Telegram kanaliga real-time notification yuborish (location create, alerts, reports)
+- **Service**: `TelegramService` - reusable service for any notification
+- **Configuration**: `BotSettings:Telegram:BotToken`, `BotSettings:Telegram:ChannelId` in appsettings
+- **Features**:
+  - Oddiy text xabarlar
+  - Formatted xabarlar (HTML/Markdown)
+  - Location ma'lumotlari (Google Maps link bilan)
+  - Bulk location reports
+  - Custom data reports
+  - Alert/Warning xabarlari (ERROR, WARNING, INFO, SUCCESS)
+- **Auto-Integration**: LocationService'da location create bo'lganda avtomatik Telegram'ga yuboriladi
+- **Non-Blocking**: Telegram failure main operation'ni to'xtatmaydi
+- **Test Endpoints**: `/api/telegram-test/*` - service'ni test qilish uchun
+- See `TELEGRAM_SERVICE_GUIDE.md` for complete documentation
+
+**12. snake_case JSON Naming Convention**
 - **CRITICAL**: ALL API endpoints use snake_case: `/api/auth/verify_number`, `/api/locations/user_batch`
 - **CRITICAL**: ALL JSON fields use snake_case: `user_id`, `recorded_at`, `phone_number`, `activity_type`
 - **CRITICAL**: ALL query parameters use snake_case: `?start_date=...&end_date=...`
@@ -621,13 +642,16 @@ builder.Services.AddHostedService<YourService>();
 - **`SERVICE_RESULT_PATTERN.md`**: How services return results and controllers handle them - MANDATORY reading
 - **`API_RESPONSE_FORMAT.md`**: Standard API response format with complete examples for all endpoints
 - **`SNAKE_CASE_API_GUIDE.md`**: Complete guide to snake_case naming convention - CRITICAL for API consistency
+- **`PERMISSION_SYSTEM_GUIDE.md`**: Complete Permission & Role-Based Access Control (RBAC) guide - MANDATORY for authorization
 - **`SIGNALR-TESTING-GUIDE.md`**: Complete testing guide for SignalR real-time features
 - **`FLUTTER-SIGNALR-EXAMPLE.md`**: Flutter client implementation examples
 - **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end AES-256 encryption implementation for Flutter (request/response encryption)
+- **`ENCRYPTION_EXCLUDED_ROUTES_GUIDE.md`**: How to exclude specific routes from encryption (e.g., `/api/locations`)
+- **`TELEGRAM_SERVICE_GUIDE.md`**: Telegram bot integration - kanalga xabar yuborish (locations, alerts, reports)
 
 ### Code & Scripts
 
-- **SQL scripts**: Root directory (`database-setup.sql`, `create-partitions.sql`)
+- **SQL scripts**: Root directory (`database-setup.sql`, `create-partitions.sql`, `add-permission-system.sql`)
 - **API examples**: `API-EXAMPLES.http` (REST Client format)
 - **Deployment docs**: `DOCKER-DEPLOYMENT.md`, `QUICK-START.md`, `SETUP.md`
 - **Batch scripts**: Windows: `*.bat`, Linux/Mac: `*.sh`

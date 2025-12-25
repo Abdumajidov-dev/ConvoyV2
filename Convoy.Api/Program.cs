@@ -41,13 +41,17 @@ builder.Services.AddHttpClient<IPhpApiService, PhpApiService>();
 builder.Services.AddHttpClient<SmsFlySender>();
 builder.Services.AddHttpClient<SayqalSender>();
 
+// Telegram Bot Service
+builder.Services.AddHttpClient<ITelegramService, TelegramService>();
+
 // Services
 builder.Services.AddScoped<ILocationService>(sp =>
 {
     var locationRepo = sp.GetRequiredService<ILocationRepository>();
     var logger = sp.GetRequiredService<ILogger<LocationService>>();
     var hubContext = sp.GetService<IHubContext<Convoy.Api.Hubs.LocationHub>>();
-    return new LocationService(locationRepo, logger, hubContext);
+    var telegramService = sp.GetService<ITelegramService>();
+    return new LocationService(locationRepo, logger, hubContext, telegramService);
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -56,9 +60,13 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ISmsService, CompositeSmsService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 
+// Permission service
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+
 // Background services (ordering matters - DatabaseInitializer birinchi)
 builder.Services.AddHostedService<DatabaseInitializerService>();
 builder.Services.AddHostedService<PartitionMaintenanceService>();
+builder.Services.AddHostedService<PermissionSeedService>(); // Permission sistemasi seed
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -82,6 +90,21 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
 });
+
+// Authorization - Permission-based policies
+builder.Services.AddAuthorization(options =>
+{
+    // Har bir permission uchun policy yaratish
+    var allPermissions = Convoy.Domain.Constants.Permissions.GetAll();
+    foreach (var (name, _, _, _, _) in allPermissions)
+    {
+        options.AddPolicy(name, policy =>
+            policy.Requirements.Add(new Convoy.Api.Authorization.PermissionRequirement(name)));
+    }
+});
+
+// Authorization handler
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, Convoy.Api.Authorization.PermissionAuthorizationHandler>();
 
 // SignalR
 builder.Services.AddSignalR();
@@ -161,6 +184,7 @@ app.UseCors("AllowAll");
 
 // Encryption middleware (MUST run BEFORE routing to decrypt endpoint)
 app.UseEncryption();
+app.UseMiddleware<TelegramRequestLoggingMiddleware>();
 
 // Explicit routing (allows encryption middleware to change path before routing)
 app.UseRouting();
