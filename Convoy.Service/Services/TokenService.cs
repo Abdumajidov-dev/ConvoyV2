@@ -1,5 +1,8 @@
-﻿using Convoy.Service.DTOs;
+﻿using Convoy.Data.DbContexts;
+using Convoy.Domain.Entities;
+using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -14,13 +17,15 @@ public class TokenService : ITokenService
     private readonly string _issuer;
     private readonly string _audience;
     private readonly int _expirationHours;
+    private readonly AppDbConText _dbContext;
 
-    public TokenService(IConfiguration configuration)
+    public TokenService(IConfiguration configuration, AppDbConText dbContext)
     {
         _secretKey = configuration["Jwt:SecretKey"] ?? "your-256-bit-secret-key-here-make-it-long-and-secure";
         _issuer = configuration["Jwt:Issuer"] ?? "ConvoyApi";
         _audience = configuration["Jwt:Audience"] ?? "ConvoyClients";
         _expirationHours = int.TryParse(configuration["Jwt:ExpirationHours"], out var hours) ? hours : 24;
+        _dbContext = dbContext;
     }
 
     public string GenerateToken(PhpWorkerDto worker)
@@ -92,6 +97,111 @@ public class TokenService : ITokenService
             Console.WriteLine($"🔴 Token validation error: {ex.Message}");
             Console.WriteLine($"🔴 Stack trace: {ex.StackTrace}");
             return null;
+        }
+    }
+
+    public long? GetUserIdFromClaims(ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return null;
+
+        // JWT middleware tomonidan yaratilgan ClaimsPrincipal'dan user ID ni olish
+        // ClaimTypes.NameIdentifier JWT'da "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier" deb saqlanadi
+        // Lekin tokenni deserialize qilganda "nameid" ga qisqartiriladi
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)  // Standart claim type
+                       ?? user.FindFirst("nameid")                   // JWT qisqartirilgan format
+                       ?? user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"); // To'liq format
+
+        if (userIdClaim == null || string.IsNullOrEmpty(userIdClaim.Value))
+            return null;
+
+        if (long.TryParse(userIdClaim.Value, out long userId))
+            return userId;
+
+        return null;
+    }
+
+    public string? GetJtiFromToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return null;
+
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            return jwtToken.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public DateTime? GetExpiryFromToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return null;
+
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            return jwtToken.ValidTo;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> IsTokenBlacklistedAsync(string jti)
+    {
+        if (string.IsNullOrEmpty(jti))
+            return false;
+
+        return await _dbContext.TokenBlacklists
+            .AnyAsync(tb => tb.TokenJti == jti && tb.ExpiresAt > DateTime.UtcNow);
+    }
+
+    public async Task<bool> BlacklistTokenAsync(string token, long userId, string reason = "logout")
+    {
+        if (string.IsNullOrEmpty(token))
+            return false;
+
+        try
+        {
+            var jti = GetJtiFromToken(token);
+            var expiry = GetExpiryFromToken(token);
+
+            if (jti == null || expiry == null)
+                return false;
+
+            // Tekshirish - allaqachon blacklist'da bormi
+            var exists = await _dbContext.TokenBlacklists
+                .AnyAsync(tb => tb.TokenJti == jti);
+
+            if (exists)
+                return true; // Allaqachon blacklist'da
+
+            // Yangi blacklist entry yaratish
+            var blacklistEntry = new TokenBlacklist
+            {
+                TokenJti = jti,
+                UserId = userId,
+                BlacklistedAt = DateTime.UtcNow,
+                ExpiresAt = expiry.Value,
+                Reason = reason
+            };
+
+            _dbContext.TokenBlacklists.Add(blacklistEntry);
+            await _dbContext.SaveChangesAsync();
+
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

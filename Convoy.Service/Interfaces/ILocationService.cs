@@ -9,9 +9,10 @@ namespace Convoy.Service.Interfaces;
 public interface ILocationService
 {
     /// <summary>
-    /// User uchun location(lar) yaratish (userId + locations array)
+    /// User uchun bitta location yaratish (userId JWT tokendan, location data body'dan)
+    /// Body to'g'ridan-to'g'ri LocationDataDto (encryption middleware yechib beradi)
     /// </summary>
-    Task<ServiceResult<IEnumerable<LocationResponseDto>>> CreateUserLocationBatchAsync(UserLocationBatchDto dto);
+    Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, LocationDataDto locationData);
 
     /// <summary>
     /// User location'larini olish

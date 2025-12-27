@@ -13,6 +13,7 @@ public class AppDbConText : DbContext
     // DbSets - faqat EF Core bilan ishlaydigan entity'lar
     public DbSet<User> Users { get; set; }
     public DbSet<OtpCode> OtpCodes { get; set; }
+    public DbSet<TokenBlacklist> TokenBlacklists { get; set; }
 
     // Permission system entities
     public DbSet<Role> Roles { get; set; }
@@ -130,6 +131,32 @@ public class AppDbConText : DbContext
 
             // Index for faster role lookup
             entity.HasIndex(e => e.RoleId);
+        });
+
+        // TokenBlacklist entity configuration
+        modelBuilder.Entity<TokenBlacklist>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TokenJti).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.BlacklistedAt).IsRequired();
+            entity.Property(e => e.ExpiresAt).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(50);
+
+            // Unique constraint for token JTI
+            entity.HasIndex(e => e.TokenJti).IsUnique();
+
+            // Index for faster user lookup
+            entity.HasIndex(e => e.UserId);
+
+            // Index for cleanup expired tokens
+            entity.HasIndex(e => e.ExpiresAt);
+
+            // Foreign key relationship
+            entity.HasOne(tb => tb.User)
+                  .WithMany()
+                  .HasForeignKey(tb => tb.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

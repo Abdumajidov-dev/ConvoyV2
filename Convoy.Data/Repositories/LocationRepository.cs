@@ -29,15 +29,20 @@ public class LocationRepository : ILocationRepository
             INSERT INTO locations (
                 user_id, recorded_at, latitude, longitude,
                 accuracy, speed, heading, altitude,
+                ellipsoidal_altitude, heading_accuracy, speed_accuracy, altitude_accuracy, floor,
                 activity_type, activity_confidence, is_moving,
-                battery_level, is_charging, distance_from_previous,
-                created_at
+                battery_level, is_charging,
+                timestamp, age, event, mock, sample, odometer, uuid, extras,
+                distance_from_previous, created_at
             ) VALUES (
                 @UserId, @RecordedAt, @Latitude, @Longitude,
                 @Accuracy, @Speed, @Heading, @Altitude,
+                @EllipsoidalAltitude, @HeadingAccuracy, @SpeedAccuracy, @AltitudeAccuracy, @Floor,
                 @ActivityType, @ActivityConfidence, @IsMoving,
-                @BatteryLevel, @IsCharging, @DistanceFromPrevious,
-                @CreatedAt
+                @BatteryLevel, @IsCharging,
+                @Timestamp, @Age, @Event, @Mock, @Sample, @Odometer, @Uuid,
+                CAST(@Extras AS JSONB),
+                @DistanceFromPrevious, @CreatedAt
             ) RETURNING id";
 
         try
@@ -62,21 +67,33 @@ public class LocationRepository : ILocationRepository
             INSERT INTO locations (
                 user_id, recorded_at, latitude, longitude,
                 accuracy, speed, heading, altitude,
+                ellipsoidal_altitude, heading_accuracy, speed_accuracy, altitude_accuracy, floor,
                 activity_type, activity_confidence, is_moving,
-                battery_level, is_charging, distance_from_previous,
-                created_at
+                battery_level, is_charging,
+                timestamp, age, event, mock, sample, odometer, uuid, extras,
+                distance_from_previous, created_at
             ) VALUES (
                 @UserId, @RecordedAt, @Latitude, @Longitude,
                 @Accuracy, @Speed, @Heading, @Altitude,
+                @EllipsoidalAltitude, @HeadingAccuracy, @SpeedAccuracy, @AltitudeAccuracy, @Floor,
                 @ActivityType, @ActivityConfidence, @IsMoving,
-                @BatteryLevel, @IsCharging, @DistanceFromPrevious,
-                @CreatedAt
+                @BatteryLevel, @IsCharging,
+                @Timestamp, @Age, @Event, @Mock, @Sample, @Odometer, @Uuid,
+                CAST(@Extras AS JSONB),
+                @DistanceFromPrevious, @CreatedAt
             )
             RETURNING id, user_id as UserId, recorded_at as RecordedAt,
                       latitude, longitude, accuracy, speed, heading, altitude,
+                      ellipsoidal_altitude as EllipsoidalAltitude,
+                      heading_accuracy as HeadingAccuracy,
+                      speed_accuracy as SpeedAccuracy,
+                      altitude_accuracy as AltitudeAccuracy,
+                      floor,
                       activity_type as ActivityType, activity_confidence as ActivityConfidence,
                       is_moving as IsMoving, battery_level as BatteryLevel,
-                      is_charging as IsCharging, distance_from_previous as DistanceFromPrevious,
+                      is_charging as IsCharging,
+                      timestamp, age, event, mock, sample, odometer, uuid, extras,
+                      distance_from_previous as DistanceFromPrevious,
                       created_at as CreatedAt";
 
         try
@@ -109,9 +126,16 @@ public class LocationRepository : ILocationRepository
             SELECT
                 id, user_id as UserId, recorded_at as RecordedAt,
                 latitude, longitude, accuracy, speed, heading, altitude,
+                ellipsoidal_altitude as EllipsoidalAltitude,
+                heading_accuracy as HeadingAccuracy,
+                speed_accuracy as SpeedAccuracy,
+                altitude_accuracy as AltitudeAccuracy,
+                floor,
                 activity_type as ActivityType, activity_confidence as ActivityConfidence,
                 is_moving as IsMoving, battery_level as BatteryLevel,
-                is_charging as IsCharging, distance_from_previous as DistanceFromPrevious,
+                is_charging as IsCharging,
+                timestamp, age, event, mock, sample, odometer, uuid, extras,
+                distance_from_previous as DistanceFromPrevious,
                 created_at as CreatedAt
             FROM locations
             WHERE user_id = @UserId
@@ -141,9 +165,16 @@ public class LocationRepository : ILocationRepository
             SELECT
                 id, user_id as UserId, recorded_at as RecordedAt,
                 latitude, longitude, accuracy, speed, heading, altitude,
+                ellipsoidal_altitude as EllipsoidalAltitude,
+                heading_accuracy as HeadingAccuracy,
+                speed_accuracy as SpeedAccuracy,
+                altitude_accuracy as AltitudeAccuracy,
+                floor,
                 activity_type as ActivityType, activity_confidence as ActivityConfidence,
                 is_moving as IsMoving, battery_level as BatteryLevel,
-                is_charging as IsCharging, distance_from_previous as DistanceFromPrevious,
+                is_charging as IsCharging,
+                timestamp, age, event, mock, sample, odometer, uuid, extras,
+                distance_from_previous as DistanceFromPrevious,
                 created_at as CreatedAt
             FROM locations
             WHERE user_id = @UserId
@@ -204,9 +235,16 @@ public class LocationRepository : ILocationRepository
             SELECT
                 id, user_id as UserId, recorded_at as RecordedAt,
                 latitude, longitude, accuracy, speed, heading, altitude,
+                ellipsoidal_altitude as EllipsoidalAltitude,
+                heading_accuracy as HeadingAccuracy,
+                speed_accuracy as SpeedAccuracy,
+                altitude_accuracy as AltitudeAccuracy,
+                floor,
                 activity_type as ActivityType, activity_confidence as ActivityConfidence,
                 is_moving as IsMoving, battery_level as BatteryLevel,
-                is_charging as IsCharging, distance_from_previous as DistanceFromPrevious,
+                is_charging as IsCharging,
+                timestamp, age, event, mock, sample, odometer, uuid, extras,
+                distance_from_previous as DistanceFromPrevious,
                 created_at as CreatedAt
             FROM locations
             WHERE id = @Id AND recorded_at = @RecordedAt";

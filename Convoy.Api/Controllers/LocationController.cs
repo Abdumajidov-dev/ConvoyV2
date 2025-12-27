@@ -1,7 +1,9 @@
 using Convoy.Api.Models;
 using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Convoy.Api.Controllers;
 
@@ -10,32 +12,140 @@ namespace Convoy.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/locations")]
+[Authorize] // Barcha endpoint'lar authentication talab qiladi
 public class LocationController : ControllerBase
 {
     private readonly ILocationService _locationService;
+    private readonly ITokenService _tokenService;
     private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILocationService locationService,
+        ITokenService tokenService,
         ILogger<LocationController> logger)
     {
         _locationService = locationService;
+        _tokenService = tokenService;
         _logger = logger;
     }
 
     /// <summary>
-    /// Location yaratish (user_id + locations array)
+    /// Location yaratish (wrapped format, user_id JWT tokendan olinadi)
     /// POST /api/locations
+    ///
+    /// ENCRYPTION:
+    /// - Agar encryption enabled bo'lsa: body shifrlangan JSON object (middleware yechib beradi)
+    /// - Agar encryption disabled bo'lsa: body oddiy JSON object
+    ///
+    /// BODY FORMAT: Wrapped format (Flutter default)
+    /// {
+    ///   "locations": {
+    ///     "latitude": 41.311151,
+    ///     "longitude": 69.279737,
+    ///     ...
+    ///   }
+    /// }
     /// </summary>
     [HttpPost]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<LocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<LocationResponseDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> CreateLocations([FromBody] UserLocationBatchDto dto)
+    public async Task<IActionResult> CreateLocation([FromBody] LocationRequestWrapperDto request)
     {
-        var result = await _locationService.CreateUserLocationBatchAsync(dto);
+        // JWT tokendan user_id ni olish (TokenService orqali)
+        var userId = _tokenService.GetUserIdFromClaims(User);
+        if (userId == null || userId == 0)
+        {
+            _logger.LogWarning("Invalid or missing user_id claim in JWT token");
+            return Unauthorized(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Noto'g'ri yoki mavjud bo'lmagan user_id token'da",
+                Data = null
+            });
+        }
 
-        var apiResponse = new ApiResponse<IEnumerable<LocationResponseDto>>
+        // Validate request
+        if (request?.Location == null)
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Location object bo'sh yoki mavjud emas",
+                Data = null
+            });
+        }
+
+        var flutter = request.Location;
+
+        // Validate coords
+        if (flutter.Coords == null)
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Coords object bo'sh yoki mavjud emas",
+                Data = null
+            });
+        }
+
+        // Validate and sanitize battery level (0-100 oralig'ida bo'lishi kerak)
+        int? batteryLevel = null;
+        if (flutter.Battery?.Level != null)
+        {
+            var level = flutter.Battery.Level.Value;
+            if (level >= 0 && level <= 100)
+            {
+                batteryLevel = level;
+            }
+            else
+            {
+                _logger.LogWarning("Invalid battery level {Level} for UserId={UserId}, setting to null", level, userId.Value);
+            }
+        }
+
+        // Map Flutter format to LocationDataDto
+        var locationData = new LocationDataDto
+        {
+            // Core location from coords
+            Latitude = flutter.Coords.Latitude,
+            Longitude = flutter.Coords.Longitude,
+            Accuracy = flutter.Coords.Accuracy,
+            Speed = flutter.Coords.Speed,
+            Heading = flutter.Coords.Heading,
+            Altitude = flutter.Coords.Altitude,
+
+            // Extended coords
+            EllipsoidalAltitude = flutter.Coords.EllipsoidalAltitude,
+            HeadingAccuracy = flutter.Coords.HeadingAccuracy,
+            SpeedAccuracy = flutter.Coords.SpeedAccuracy,
+            AltitudeAccuracy = flutter.Coords.AltitudeAccuracy,
+
+            // Activity
+            ActivityType = flutter.Activity?.Type,
+            ActivityConfidence = flutter.Activity?.Confidence,
+            IsMoving = flutter.IsMoving,
+
+            // Battery (validated)
+            BatteryLevel = batteryLevel,
+            IsCharging = flutter.Battery?.IsCharging,
+
+            // Metadata
+            RecordedAt = flutter.RecordedAt,
+            Timestamp = flutter.Timestamp,
+            Age = flutter.Age,
+            Odometer = flutter.Odometer,
+            Uuid = flutter.Uuid,
+            Extras = flutter.Extras != null ? System.Text.Json.JsonSerializer.Serialize(flutter.Extras) : null
+        };
+
+        _logger.LogInformation("Creating location for UserId={UserId}, Lat={Lat}, Lon={Lon}",
+            userId.Value, locationData.Latitude, locationData.Longitude);
+
+        var result = await _locationService.CreateUserLocationAsync((int)userId.Value, locationData);
+
+        var apiResponse = new ApiResponse<LocationResponseDto>
         {
             Status = result.Success,
             Message = result.Message,

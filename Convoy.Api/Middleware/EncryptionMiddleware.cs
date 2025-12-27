@@ -85,6 +85,7 @@ public class EncryptionMiddleware
         // Ba'zi route'lar encryption'dan excluded
         if (IsExcludedRoute(context.Request.Path))
         {
+            //context.Request.Headers["Authorization"] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiI1Mjc3IiwidW5pcXVlX25hbWUiOiLQkNC90LLQsNGA0YXQvtC9INCc0YPRgNC-0YLRhdC-0L3QvtCyIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbW9iaWxlcGhvbmUiOiI5MTY3MTQ4MzUiLCJ3b3JrZXJfZ3VpZCI6IjM3MWY3ZjAwLTRmMTAtMTFlZi1iYzQxLTAwMGMyOTQxNzkyYSIsImJyYW5jaF9ndWlkIjoiZTc0MGIxYmQtM2MxYS0xMWViLTk2NDItMTgzMWJmYjc4NTBjIiwiYnJhbmNoX25hbWUiOiLQpNCw0YDQs9C-0L3QsCIsInBvc2l0aW9uX2lkIjoiODYiLCJqdGkiOiJlOTZjMDc0NC0wODkxLTQwZWYtYWJkZS03YmIwOTNmMTlmYjciLCJuYmYiOjE3NjY3Mjk3NzcsImV4cCI6MTc2NjgxNjE3NywiaWF0IjoxNzY2NzI5Nzc3LCJpc3MiOiJDb252b3lBcGkiLCJhdWQiOiJDb252b3lDbGllbnRzIn0.ILxRTB2mF195g7c3lDxfKShLYryZA75Y-MoI67U1DCw";
             _logger.LogDebug("Route {Path} excluded from encryption", context.Request.Path);
             await _next(context);
             return;
@@ -93,7 +94,8 @@ public class EncryptionMiddleware
         // Faqat POST/PUT/PATCH request larda body ni decrypt qilish
         if (context.Request.Method == "POST" ||
             context.Request.Method == "PUT" ||
-            context.Request.Method == "PATCH")
+            context.Request.Method == "PATCH"||
+            context.Request.Method == "GET")
         {
             await DecryptRequestAsync(context, encryptionService);
         }
@@ -229,7 +231,6 @@ public class EncryptionMiddleware
             await context.Response.Body.CopyToAsync(originalBodyStream);
             return;
         }
-
         try
         {
             // Response ni to'g'ridan-to'g'ri encrypt qilish (without wrapper)
@@ -423,7 +424,8 @@ public class EncryptionMiddleware
     private void DecryptIndividualHeaders(HttpContext context, IEncryptionService encryptionService)
     {
         // Decrypt qilinadigan header nomlari
-        var headersToDecrypt = new[] { "device-info", "Authorization", "X-Custom-Data" };
+        // NOTE: Authorization header EXCLUDED - JWT token allaqachon secure, encrypt qilish shart emas
+        var headersToDecrypt = new[] { "device-info", "X-Custom-Data" };
 
         foreach (var headerName in headersToDecrypt)
         {

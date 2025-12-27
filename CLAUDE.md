@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **JWT Authentication**: OTP-based authentication with external PHP API integration
 - **Permission System**: Role-Based Access Control (RBAC) with granular permissions
 - **Dual SMS Providers**: Failover SMS system (SmsFly → Sayqal)
+- **Flutter Background Geolocation**: Full integration with flutter_background_geolocation library (extended coords, metadata, events)
+- **Telegram Bot Integration**: Channel notifications for locations, alerts, and custom reports
 - **snake_case JSON**: ALL API endpoints and JSON fields use snake_case naming convention
 
 ## Build & Run Commands
@@ -648,10 +650,11 @@ builder.Services.AddHostedService<YourService>();
 - **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end AES-256 encryption implementation for Flutter (request/response encryption)
 - **`ENCRYPTION_EXCLUDED_ROUTES_GUIDE.md`**: How to exclude specific routes from encryption (e.g., `/api/locations`)
 - **`TELEGRAM_SERVICE_GUIDE.md`**: Telegram bot integration - kanalga xabar yuborish (locations, alerts, reports)
+- **`FLUTTER_BACKGROUND_GEOLOCATION_INTEGRATION.md`**: Flutter Background Geolocation library integration - complete migration guide
 
 ### Code & Scripts
 
-- **SQL scripts**: Root directory (`database-setup.sql`, `create-partitions.sql`, `add-permission-system.sql`)
+- **SQL scripts**: Root directory (`database-setup.sql`, `create-partitions.sql`, `add-permission-system.sql`, `update-locations-table.sql`)
 - **API examples**: `API-EXAMPLES.http` (REST Client format)
 - **Deployment docs**: `DOCKER-DEPLOYMENT.md`, `QUICK-START.md`, `SETUP.md`
 - **Batch scripts**: Windows: `*.bat`, Linux/Mac: `*.sh`

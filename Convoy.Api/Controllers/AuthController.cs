@@ -13,11 +13,13 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
+    private readonly ITokenService _tokenService;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService, ILogger<AuthController> logger, ITokenService tokenService)
     {
         _authService = authService;
         _logger = logger;
+        _tokenService = tokenService;
     }
 
     /// <summary>
@@ -137,20 +139,21 @@ public class AuthController : ControllerBase
     {
         try
         {
-            // JWT token'dan user_id olish
-            var userIdClaim = User.FindFirst("user_id")?.Value;
-
-            if (string.IsNullOrEmpty(userIdClaim))
+            // Authorization header'dan JWT token olish
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 return Unauthorized(new
                 {
                     status = false,
-                    message = "Invalid token",
+                    message = "Authorization header not found",
                     data = (object?)null
                 });
             }
 
-            var result = await _authService.GetMeAsync(userIdClaim);
+            var token = authHeader.Substring("Bearer ".Length).Trim();
+
+            var result = await _authService.GetMeAsync(token);
 
             var response = new
             {
@@ -169,6 +172,73 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting current user");
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Internal server error",
+                data = (object?)null
+            });
+        }
+    }
+
+    /// <summary>
+    /// Logout - tokenni bekor qilish (blacklist'ga qo'shish)
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout()
+    {
+        try
+        {
+            // Authorization header'dan JWT token olish
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return Unauthorized(new
+                {
+                    status = false,
+                    message = "Authorization header not found",
+                    data = (object?)null
+                });
+            }
+
+            var token = authHeader.Substring("Bearer ".Length).Trim();
+
+            // User ID olish
+            var userId = _tokenService.GetUserIdFromClaims(User);
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = false,
+                    message = "Invalid token",
+                    data = (object?)null
+                });
+            }
+
+            // Tokenni blacklist'ga qo'shish
+            var success = await _tokenService.BlacklistTokenAsync(token, userId.Value, "logout");
+
+            if (!success)
+            {
+                return StatusCode(500, new
+                {
+                    status = false,
+                    message = "Logout qilishda xatolik yuz berdi",
+                    data = (object?)null
+                });
+            }
+
+            return Ok(new
+            {
+                status = true,
+                message = "Muvaffaqiyatli logout qilindi",
+                data = (object?)null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during logout");
             return StatusCode(500, new
             {
                 status = false,

@@ -31,96 +31,109 @@ public class LocationService : ILocationService
 
 
     /// <summary>
-    /// Bitta user uchun ko'p location yaratish (userId + locations array)
+    /// Bitta user uchun bitta location yaratish (userId controller'dan, location data body'dan)
     /// </summary>
-    public async Task<ServiceResult<IEnumerable<LocationResponseDto>>> CreateUserLocationBatchAsync(UserLocationBatchDto dto)
+    public async Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, LocationDataDto locationData)
     {
         try
         {
-            if (!dto.Locations.Any())
+            // RecordedAt bo'lmasa - hozirgi vaqtni set qilish
+            if (!locationData.RecordedAt.HasValue)
             {
-                return ServiceResult<IEnumerable<LocationResponseDto>>.BadRequest(
-                    "Locations array bo'sh bo'lmasligi kerak");
+                locationData.RecordedAt = DateTime.UtcNow;
             }
-            // Vaqt bo'yicha sort qilish
-            var sortedLocations = dto.Locations.OrderBy(l => l.RecordedAt).ToList();
 
-            var locations = new List<Location>();
-            var responseDtos = new List<LocationResponseDto>();
-            Location? previousLocation = null;
+            // User'ning oldingi location'ini olish (distance hisoblash uchun)
+            var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
+            var previousLocation = lastLocations.FirstOrDefault();
 
-            // User'ning oldingi location'ini olish
-            var lastLocations = await _locationRepository.GetLastLocationsAsync(dto.UserId, 1);
-            previousLocation = lastLocations.FirstOrDefault();
+            decimal? distanceFromPrevious = null;
 
-            foreach (var locDto in sortedLocations)
+            if (previousLocation != null)
             {
-                decimal? distanceFromPrevious = null;
+                var distance = _locationRepository.CalculateDistance(
+                    previousLocation.Latitude,
+                    previousLocation.Longitude,
+                    locationData.Latitude,
+                    locationData.Longitude
+                );
+                distanceFromPrevious = (decimal)distance;
+            }
 
-                if (previousLocation != null)
+            // Location entity yaratish
+            var location = new Location
+            {
+                UserId = userId,
+                RecordedAt = locationData.RecordedAt.Value,
+
+                // Core location properties (REQUIRED)
+                Latitude = locationData.Latitude,
+                Longitude = locationData.Longitude,
+
+                // Core location properties (OPTIONAL)
+                Accuracy = locationData.Accuracy,
+                Speed = locationData.Speed,
+                Heading = locationData.Heading,
+                Altitude = locationData.Altitude,
+
+                // Flutter Background Geolocation - Extended Coords (OPTIONAL)
+                EllipsoidalAltitude = locationData.EllipsoidalAltitude,
+                HeadingAccuracy = locationData.HeadingAccuracy,
+                SpeedAccuracy = locationData.SpeedAccuracy,
+                AltitudeAccuracy = locationData.AltitudeAccuracy,
+                Floor = locationData.Floor,
+
+                // Activity (OPTIONAL)
+                ActivityType = locationData.ActivityType,
+                ActivityConfidence = locationData.ActivityConfidence,
+                IsMoving = locationData.IsMoving ?? false,
+
+                // Battery (OPTIONAL)
+                BatteryLevel = locationData.BatteryLevel,
+                IsCharging = locationData.IsCharging ?? false,
+
+                // Flutter Background Geolocation - Location metadata (OPTIONAL)
+                Timestamp = locationData.Timestamp,
+                Age = locationData.Age,
+                Event = locationData.Event,
+                Mock = locationData.Mock,
+                Sample = locationData.Sample,
+                Odometer = locationData.Odometer,
+                Uuid = locationData.Uuid,
+                Extras = locationData.Extras,
+
+                // Calculated fields
+                DistanceFromPrevious = distanceFromPrevious,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // Database'ga saqlash - ID bilan qaytadi
+            var insertedId = await _locationRepository.InsertAsync(location);
+            location.Id = insertedId;
+
+            _logger.LogInformation("User {UserId} uchun location yaratildi, ID={LocationId}", userId, insertedId);
+
+            // Response DTO yaratish
+            var responseDto = MapToDto(location);
+
+            // SignalR orqali real-time broadcast
+            if (_locationHubContext != null)
+            {
+                try
                 {
-                    var distance = _locationRepository.CalculateDistance(
-                        previousLocation.Latitude,
-                        previousLocation.Longitude,
-                        locDto.Latitude,
-                        locDto.Longitude
-                    );
-                    distanceFromPrevious = (decimal)distance;
+                    dynamic hubContext = _locationHubContext;
+
+                    // Specific user'ni track qilayotganlarga
+                    await hubContext.Clients.Group($"user_{userId}")
+                        .SendAsync("LocationUpdated", responseDto);
+
+                    // Barcha user'larni track qilayotganlarga
+                    await hubContext.Clients.Group("all_users")
+                        .SendAsync("LocationUpdated", responseDto);
                 }
-
-                var location = new Location
+                catch (Exception ex)
                 {
-                    UserId = dto.UserId,
-                    RecordedAt = locDto.RecordedAt,
-                    Latitude = locDto.Latitude,
-                    Longitude = locDto.Longitude,
-                    Accuracy = locDto.Accuracy,
-                    Speed = locDto.Speed,
-                    Heading = locDto.Heading,
-                    Altitude = locDto.Altitude,
-                    ActivityType = locDto.ActivityType,
-                    ActivityConfidence = locDto.ActivityConfidence,
-                    IsMoving = locDto.IsMoving,
-                    BatteryLevel = locDto.BatteryLevel,
-                    IsCharging = locDto.IsCharging ?? false,
-                    DistanceFromPrevious = distanceFromPrevious,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                locations.Add(location);
-                previousLocation = location;
-            }
-
-            // Database'ga saqlash - ID'lari bilan qaytadi
-            var insertedLocations = await _locationRepository.InsertBatchAsync(locations);
-            var insertedLocationsList = insertedLocations.ToList();
-            _logger.LogInformation("User {UserId} uchun {Count} ta location yaratildi", dto.UserId, insertedLocationsList.Count);
-
-            // Response DTO'lar yaratish - database'dan qaytgan ID'lar bilan
-            foreach (var location in insertedLocationsList)
-            {
-                var responseDto = MapToDto(location);
-                responseDtos.Add(responseDto);
-
-                // SignalR orqali real-time broadcast
-                if (_locationHubContext != null)
-                {
-                    try
-                    {
-                        dynamic hubContext = _locationHubContext;
-
-                        // Specific user'ni track qilayotganlarga
-                        await hubContext.Clients.Group($"user_{dto.UserId}")
-                            .SendAsync("LocationUpdated", responseDto);
-
-                        // Barcha user'larni track qilayotganlarga
-                        await hubContext.Clients.Group("all_users")
-                            .SendAsync("LocationUpdated", responseDto);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to broadcast location via SignalR for UserId={UserId}", dto.UserId);
-                    }
+                    _logger.LogWarning(ex, "Failed to broadcast location via SignalR for UserId={UserId}", userId);
                 }
             }
 
@@ -129,48 +142,26 @@ public class LocationService : ILocationService
             {
                 try
                 {
-                    // Bitta location bo'lsa
-                    if (responseDtos.Count == 1)
-                    {
-                        var loc = responseDtos[0];
-                        await _telegramService.SendLocationDataAsync(
-                            dto.UserId,
-                            $"User {dto.UserId}", // Agar user name kerak bo'lsa, dto'ga qo'shish kerak
-                            double.Parse( loc.Latitude.ToString()),
-                            double.Parse(loc.Longitude.ToString()),
-                            loc.RecordedAt
-                        );
-                    }
-                    // Ko'p location bo'lsa (bulk)
-                    else
-                    {
-                        var firstLoc = responseDtos.First();
-                        var lastLoc = responseDtos.Last();
-                        await _telegramService.SendBulkLocationDataAsync(
-                            dto.UserId,
-                            $"User {dto.UserId}",
-                            responseDtos.Count,
-                            firstLoc.RecordedAt,
-                            lastLoc.RecordedAt
-                        );
-                    }
+                    await _telegramService.SendLocationDataAsync(
+                        userId,
+                        $"User {userId}",
+                        double.Parse(responseDto.Latitude.ToString()),
+                        double.Parse(responseDto.Longitude.ToString()),
+                        responseDto.RecordedAt
+                    );
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to send Telegram notification for UserId={UserId}", dto.UserId);
+                    _logger.LogWarning(ex, "Failed to send Telegram notification for UserId={UserId}", userId);
                 }
             }
 
-            var message = responseDtos.Count == 1
-                ? "Location muvaffaqiyatli yaratildi"
-                : $"{responseDtos.Count} ta location muvaffaqiyatli yaratildi";
-
-            return ServiceResult<IEnumerable<LocationResponseDto>>.Created(responseDtos, message);
+            return ServiceResult<LocationResponseDto>.Created(responseDto, "Location muvaffaqiyatli yaratildi");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating user location batch for UserId={UserId}", dto.UserId);
-            return ServiceResult<IEnumerable<LocationResponseDto>>.ServerError(
+            _logger.LogError(ex, "Error creating location for UserId={UserId}", userId);
+            return ServiceResult<LocationResponseDto>.ServerError(
                 "Location yaratishda xatolik yuz berdi");
         }
     }
@@ -318,17 +309,42 @@ public class LocationService : ILocationService
             Id = location.Id,
             UserId = location.UserId,
             RecordedAt = location.RecordedAt,
+
+            // Core location properties
             Latitude = location.Latitude,
             Longitude = location.Longitude,
             Accuracy = location.Accuracy,
             Speed = location.Speed,
             Heading = location.Heading,
             Altitude = location.Altitude,
+
+            // Flutter Background Geolocation - Extended Coords
+            EllipsoidalAltitude = location.EllipsoidalAltitude,
+            HeadingAccuracy = location.HeadingAccuracy,
+            SpeedAccuracy = location.SpeedAccuracy,
+            AltitudeAccuracy = location.AltitudeAccuracy,
+            Floor = location.Floor,
+
+            // Activity
             ActivityType = location.ActivityType,
             ActivityConfidence = location.ActivityConfidence,
             IsMoving = location.IsMoving,
+
+            // Battery
             BatteryLevel = location.BatteryLevel,
             IsCharging = location.IsCharging,
+
+            // Flutter Background Geolocation - Location metadata
+            Timestamp = location.Timestamp,
+            Age = location.Age,
+            Event = location.Event,
+            Mock = location.Mock,
+            Sample = location.Sample,
+            Odometer = location.Odometer,
+            Uuid = location.Uuid,
+            Extras = location.Extras,
+
+            // Calculated fields
             DistanceFromPrevious = location.DistanceFromPrevious,
             CreatedAt = location.CreatedAt
         };

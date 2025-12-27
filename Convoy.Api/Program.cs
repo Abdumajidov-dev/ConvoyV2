@@ -89,6 +89,50 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
+
+    // Custom token extraction - "token" headeridan yoki "Authorization" headeridan
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            //// Birinchi "token" headerini tekshirish
+            //if (context.Request.Headers.TryGetValue("token", out var tokenValue))
+            //{
+            //    context.Token = tokenValue;
+            //}
+            // Agar "token" header bo'lmasa, standart "Authorization: Bearer" ni ishlatish
+             if (context.Request.Headers.ContainsKey("Authorization"))
+            {
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Token = authHeader.Substring("Bearer ".Length).Trim();
+                }
+            }
+
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            // Token blacklist'da ekanligini tekshirish
+            var tokenService = context.HttpContext.RequestServices.GetRequiredService<ITokenService>();
+            var token = context.SecurityToken as System.IdentityModel.Tokens.Jwt.JwtSecurityToken;
+
+            if (token != null)
+            {
+                var jti = token.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+
+                if (!string.IsNullOrEmpty(jti))
+                {
+                    var isBlacklisted = await tokenService.IsTokenBlacklistedAsync(jti);
+                    if (isBlacklisted)
+                    {
+                        context.Fail("Token has been revoked (logged out)");
+                    }
+                }
+            }
+        }
+    };
 });
 
 // Authorization - Permission-based policies
@@ -181,6 +225,9 @@ app.UseHttpsRedirection();
 
 // CORS middleware
 app.UseCors("AllowAll");
+
+// Token header logging middleware (for debugging Flutter requests)
+app.UseTokenHeaderLogging();
 
 // Encryption middleware (MUST run BEFORE routing to decrypt endpoint)
 app.UseEncryption();

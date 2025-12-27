@@ -3,6 +3,7 @@ namespace Convoy.Domain.Entities;
 /// <summary>
 /// Location entity - Dapper bilan ishlaydi (partitioned table)
 /// Auditable'dan inherit QILMAYDI chunki partition key conflict
+/// Matches Flutter Background Geolocation library model
 /// </summary>
 public class Location
 {
@@ -20,6 +21,10 @@ public class Location
     /// GPS koordinata yozilgan vaqt (Partition key)
     /// </summary>
     public DateTime RecordedAt { get; set; }
+
+    // ============================
+    // Core Location Properties
+    // ============================
 
     /// <summary>
     /// Kenglik (Latitude) - decimal(10, 8)
@@ -51,6 +56,39 @@ public class Location
     /// </summary>
     public decimal? Altitude { get; set; }
 
+    // ============================
+    // Flutter Background Geolocation - Extended Coords
+    // ============================
+
+    /// <summary>
+    /// Altitude above WGS84 reference ellipsoid (meters)
+    /// </summary>
+    public decimal? EllipsoidalAltitude { get; set; }
+
+    /// <summary>
+    /// Heading accuracy in degrees
+    /// </summary>
+    public decimal? HeadingAccuracy { get; set; }
+
+    /// <summary>
+    /// Speed accuracy in meters/second
+    /// </summary>
+    public decimal? SpeedAccuracy { get; set; }
+
+    /// <summary>
+    /// Altitude accuracy in meters
+    /// </summary>
+    public decimal? AltitudeAccuracy { get; set; }
+
+    /// <summary>
+    /// Floor within a building (iOS only)
+    /// </summary>
+    public int? Floor { get; set; }
+
+    // ============================
+    // Activity
+    // ============================
+
     /// <summary>
     /// Faoliyat turi (still, walking, running, cycling, automotive)
     /// </summary>
@@ -66,15 +104,67 @@ public class Location
     /// </summary>
     public bool IsMoving { get; set; } = false;
 
+    // ============================
+    // Battery
+    // ============================
+
     /// <summary>
     /// Batareya darajasi (0-100)
     /// </summary>
     public int? BatteryLevel { get; set; }
 
     /// <summary>
-    /// Quvvatlash holatida
+    /// Quvvatlash holatida (is device plugged in)
     /// </summary>
     public bool? IsCharging { get; set; }
+
+    // ============================
+    // Flutter Background Geolocation - Location Metadata
+    // ============================
+
+    /// <summary>
+    /// Flutter timestamp (ISO 8601 UTC format)
+    /// </summary>
+    public DateTime? Timestamp { get; set; }
+
+    /// <summary>
+    /// Age of location in milliseconds
+    /// </summary>
+    public decimal? Age { get; set; }
+
+    /// <summary>
+    /// Event that caused this location: motionchange, heartbeat, providerchange, geofence
+    /// </summary>
+    public string? Event { get; set; }
+
+    /// <summary>
+    /// Android only - true if location from mock app
+    /// </summary>
+    public bool? Mock { get; set; }
+
+    /// <summary>
+    /// True if this is sample location (ignore for upload)
+    /// </summary>
+    public bool? Sample { get; set; }
+
+    /// <summary>
+    /// Current distance traveled in meters
+    /// </summary>
+    public decimal? Odometer { get; set; }
+
+    /// <summary>
+    /// Universally Unique Identifier
+    /// </summary>
+    public string? Uuid { get; set; }
+
+    /// <summary>
+    /// Arbitrary extras object (JSON string)
+    /// </summary>
+    public string? Extras { get; set; }
+
+    // ============================
+    // Calculated Fields
+    // ============================
 
     /// <summary>
     /// Oldingi nuqtadan masofa (metrda) - decimal(10, 2)
