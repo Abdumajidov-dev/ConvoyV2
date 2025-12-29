@@ -28,8 +28,9 @@ public interface IAuthService
 
     /// <summary>
     /// 4-qadam: Token orqali user ma'lumotlarini qaytaradi (GetMe)
+    /// Flutter uchun qulay formatda: user info + roles + grouped permissions
     /// </summary>
     /// <param name="token">JWT token</param>
-    /// <returns>AuthResponse with PhpWorkerDto yoki error</returns>
-    Task<AuthResponseDto<PhpWorkerDto>> GetMeAsync(string token);
+    /// <returns>AuthResponse with UserPermissionsDto yoki error</returns>
+    Task<AuthResponseDto<UserPermissionsDto>> GetMeAsync(string token);
 }

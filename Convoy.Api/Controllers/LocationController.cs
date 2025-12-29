@@ -16,15 +16,18 @@ namespace Convoy.Api.Controllers;
 public class LocationController : ControllerBase
 {
     private readonly ILocationService _locationService;
+    private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
     private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILocationService locationService,
+        IUserService userService,
         ITokenService tokenService,
         ILogger<LocationController> logger)
     {
         _locationService = locationService;
+        _userService = userService;
         _tokenService = tokenService;
         _logger = logger;
     }
@@ -240,6 +243,68 @@ public class LocationController : ControllerBase
         };
 
         return StatusCode(result.StatusCode, apiResponse);
+    }
+
+    /// <summary>
+    /// Barcha userlarning oxirgi location'larini olish (user ma'lumotlari bilan birga)
+    /// GET /api/locations/latest_all
+    /// </summary>
+    [HttpGet("latest_all")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<UserWithLatestLocationDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetAllUsersLatestLocations()
+    {
+        try
+        {
+            // 1. Barcha active userlarni olish
+            var users = await _userService.GetAllActiveUsersAsync();
+
+            // 2. Barcha oxirgi locationlarni olish
+            var locationsResult = await _locationService.GetAllUsersLatestLocationsAsync();
+
+            if (!locationsResult.Success)
+            {
+                return StatusCode(locationsResult.StatusCode, new ApiResponse<object>
+                {
+                    Status = false,
+                    Message = locationsResult.Message,
+                    Data = null
+                });
+            }
+
+            // 3. User va location ma'lumotlarini birlashtirish
+            var locations = locationsResult.Data ?? new List<LocationResponseDto>();
+            var locationsByUserId = locations.ToDictionary(l => l.UserId, l => l);
+
+            var result = users.Select(user => new UserWithLatestLocationDto
+            {
+                UserId = (int)user.Id,
+                Name = user.Name,
+                Phone = user.Phone,
+                Image = null, // User entity'da image yo'q, kerak bo'lsa qo'shish mumkin
+                IsActive = user.IsActive,
+                LatestLocation = locationsByUserId.TryGetValue((int)user.Id, out var location) ? location : null
+            }).ToList();
+
+            var apiResponse = new ApiResponse<IEnumerable<UserWithLatestLocationDto>>
+            {
+                Status = true,
+                Message = $"Barcha userlarning ma'lumotlari va oxirgi locationlari ({result.Count} ta user)",
+                Data = result
+            };
+
+            return Ok(apiResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all users with latest locations");
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Xatolik yuz berdi",
+                Data = null
+            });
+        }
     }
 
     /// <summary>

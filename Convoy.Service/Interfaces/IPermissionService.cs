@@ -57,4 +57,10 @@ public interface IPermissionService
     /// User'ning role'larini olish
     /// </summary>
     Task<ServiceResult<List<Role>>> GetUserRolesAsync(long userId);
+
+    /// <summary>
+    /// User'ning permission'larini grouped format'da olish (Flutter uchun)
+    /// Format: [{"users": ["view", "create"]}, {"locations": ["view", "create"]}]
+    /// </summary>
+    Task<List<Dictionary<string, List<string>>>> GetUserPermissionsGroupedAsync(long userId);
 }

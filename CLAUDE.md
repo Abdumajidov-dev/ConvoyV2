@@ -85,6 +85,11 @@ dotnet test --verbosity detailed
 
 # Run specific test project
 dotnet test Convoy.Tests/Convoy.Tests.csproj
+
+# Python integration tests (manual API testing)
+python test_encryption.py          # Test encryption endpoints
+python test_permissions_me.py      # Test /api/auth/me with permissions
+python test_verify_number.py       # Test phone verification flow
 ```
 
 ## Architecture
@@ -181,14 +186,16 @@ Convoy/
 - Clients join groups via hub methods: `JoinUserTracking(userId)`, `JoinAllUsersTracking()`
 - Event name: `LocationUpdated` with `LocationResponseDto` payload
 
-**7. Authentication Flow (OTP + JWT)**
+**7. Authentication Flow (OTP + JWT + Logout)**
 - **Step 1 - Verify Phone**: `POST /api/auth/verify_number` → Validates user exists in external PHP API and checks allowed position IDs
 - **Step 2 - Send OTP**: `POST /api/auth/send_otp` → Generates OTP code, sends via SMS (SmsFly → Sayqal failover)
 - **Step 3 - Verify OTP**: `POST /api/auth/verify_otp` → Validates code, returns JWT token
 - **Step 4 - Use Token**: Include `Authorization: Bearer {token}` header in subsequent requests
 - **Step 5 - Get User Info**: `GET /api/auth/me` → Returns current user info from JWT token (requires authentication)
+- **Step 6 - Logout**: `POST /api/auth/logout` → Blacklists current token to prevent reuse (requires authentication)
 - Worker data cached in-memory during auth flow (phone number → PhpWorkerDto)
 - OTP codes stored in `otp_codes` table (EF Core), auto-expire after configured minutes (default: 1 minute)
+- Token blacklisting prevents logout'ed tokens from being reused (stored in `token_blacklist` table)
 
 **8. SMS Provider Failover Strategy**
 - `CompositeSmsService` implements `ISmsService` interface
@@ -256,6 +263,20 @@ Convoy/
 - Dart/Flutter clients can use property names directly without manual mapping
 - See `SNAKE_CASE_API_GUIDE.md` for complete API contract
 
+**13. Permission System (RBAC)**
+- **Purpose**: Role-Based Access Control for fine-grained authorization
+- **Components**:
+  - `Permission` entity: Defines actions (e.g., `users.view`, `locations.create`)
+  - `Role` entity: Groups permissions (e.g., SuperAdmin, Admin, Manager, Driver, Viewer)
+  - `UserRole`: Many-to-many relationship between users and roles
+  - `RolePermission`: Many-to-many relationship between roles and permissions
+- **Usage**: Controllers use `[HasPermission("resource.action")]` attribute
+- **Auto-seeding**: `PermissionSeedService` creates default roles and permissions on startup
+- **Permission format**: `<resource>.<action>` (e.g., `users.view`, `locations.create`)
+- **Default roles**: 5 pre-configured roles with 28 permissions
+- **JWT integration**: User permissions can be checked via `IPermissionService.UserHasPermissionAsync()`
+- See `PERMISSION_SYSTEM_GUIDE.md` for complete documentation
+
 ## Database Schema
 
 ### Partitioned Table (Dapper)
@@ -299,6 +320,50 @@ otp_codes
 ├── expires_at TIMESTAMPTZ
 ├── is_used BOOLEAN
 └── IsValid (computed property: !is_used && expires_at > NOW())
+
+roles (Permission System)
+├── id BIGSERIAL PRIMARY KEY
+├── name VARCHAR(100) UNIQUE (e.g., "SuperAdmin", "Driver")
+├── display_name VARCHAR(200)
+├── description VARCHAR(500)
+├── is_active BOOLEAN
+└── created_at, updated_at, delete_at
+
+permissions (Permission System)
+├── id BIGSERIAL PRIMARY KEY
+├── name VARCHAR(100) UNIQUE (e.g., "users.view", "locations.create")
+├── display_name VARCHAR(200)
+├── resource VARCHAR(50) (e.g., "users", "locations")
+├── action VARCHAR(50) (e.g., "view", "create")
+├── description VARCHAR(500)
+├── is_active BOOLEAN
+└── created_at, updated_at, delete_at
+
+user_roles (Junction Table)
+├── id BIGSERIAL PRIMARY KEY
+├── user_id BIGINT FK -> users.id
+├── role_id BIGINT FK -> roles.id
+├── assigned_at TIMESTAMPTZ
+├── assigned_by BIGINT (who assigned this role)
+├── created_at, updated_at, delete_at
+└── UNIQUE(user_id, role_id)
+
+role_permissions (Junction Table)
+├── id BIGSERIAL PRIMARY KEY
+├── role_id BIGINT FK -> roles.id
+├── permission_id BIGINT FK -> permissions.id
+├── granted_at TIMESTAMPTZ
+├── granted_by BIGINT (who granted this permission)
+├── created_at, updated_at, delete_at
+└── UNIQUE(role_id, permission_id)
+
+token_blacklist (Logout/Security)
+├── id BIGSERIAL PRIMARY KEY
+├── token_hash VARCHAR(500) UNIQUE
+├── user_id BIGINT FK -> users.id
+├── blacklisted_at TIMESTAMPTZ
+├── reason VARCHAR(200) (e.g., "logout", "security")
+└── expires_at TIMESTAMPTZ
 ```
 
 ## Development Guidelines
@@ -367,8 +432,9 @@ If you need another partitioned table:
 ### Authentication & External API Integration
 
 - **External PHP API**: System validates users against external PHP API (`IPhpApiService`)
-  - Base URL configured in `appsettings.json` under `PhpApi:BaseUrl`
-  - Endpoint: `/api/verify-user/{phoneNumber}`
+  - Base URL configured in `appsettings.json` under `PhpApi:GlobalPathForSupport`
+  - Endpoint: `POST /auth-service/verification-user` (with phone_number in request body)
+  - Uses Basic Authentication (configured via `PhpApi:Username` and `PhpApi:Password`)
   - Returns worker data: ID, name, position, branch info
 - **Position-based access control**: Configure allowed position IDs in `Auth:AllowedPositionIds` (comma-separated)
   - Example: `"2,3,5"` allows only workers with these position IDs
@@ -497,6 +563,11 @@ Headers: Authorization: Bearer eyJhbGc...
 // Step 5: Access protected endpoints
 GET /api/locations/user/123
 Headers: Authorization: Bearer eyJhbGc...
+
+// Step 6: Logout (optional - invalidates token)
+POST /api/auth/logout
+Headers: Authorization: Bearer eyJhbGc...
+// Response: { status: true, message: "Muvaffaqiyatli logout qilindi", data: null }
 ```
 
 ### Querying Partitioned Table with Dapper
@@ -627,8 +698,31 @@ builder.Services.AddHostedService<YourService>();
 ### External PHP API Integration Issues
 - **User not found**: Verify phone number exists in PHP API database
 - **Position denied**: Check `Auth:AllowedPositionIds` configuration
-- **API unreachable**: Verify `PhpApi:BaseUrl` and network connectivity
+- **API unreachable**: Verify `PhpApi:GlobalPathForSupport` and network connectivity
+- **Authentication failed**: Check `PhpApi:Username` and `PhpApi:Password` are correct (uses Basic Auth)
+- **Endpoint not found**: Ensure using POST `/auth-service/verification-user` with phone_number in body
 - **Timeout**: Increase HttpClient timeout in `PhpApiService` if needed
+
+### Permission System Issues
+- **403 Forbidden**: User lacks required permission for endpoint
+  - Check user has role assigned: `SELECT * FROM user_roles WHERE user_id = 123;`
+  - Check role has permission: `SELECT p.name FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = 1;`
+  - Verify permission exists: `SELECT * FROM permissions WHERE name = 'users.view';`
+- **Permission not working**: Ensure `PermissionSeedService` ran successfully on startup
+  - Check logs for: "Permission seed completed successfully"
+  - Manually run: `psql -U postgres -d convoy_db -f add-permission-system.sql`
+- **GetMe returns no permissions**: User has no roles assigned
+  - Assign role via API: `POST /api/permissions/users/{userId}/roles/{roleId}`
+  - Or SQL: `INSERT INTO user_roles (user_id, role_id, assigned_at, created_at) VALUES (1, 4, NOW(), NOW());`
+
+### Token Blacklist Issues
+- **Logout not working**: Check `token_blacklist` table exists
+  - Create manually if needed (see database schema)
+- **Token still valid after logout**: Verify `PermissionAuthorizationHandler` checks blacklist
+- **Blacklist table full**: Implement cleanup job to remove expired tokens:
+  ```sql
+  DELETE FROM token_blacklist WHERE expires_at < NOW();
+  ```
 
 ## Performance Considerations
 

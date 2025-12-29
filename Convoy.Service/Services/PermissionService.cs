@@ -297,4 +297,44 @@ public class PermissionService : IPermissionService
             return ServiceResult<List<Role>>.ServerError("Foydalanuvchi rollarini olishda xatolik yuz berdi");
         }
     }
+
+    public async Task<List<Dictionary<string, List<string>>>> GetUserPermissionsGroupedAsync(long userId)
+    {
+        try
+        {
+            // User'ning barcha permission'larini olish
+            var permissions = await _context.UserRoles
+                .Where(ur => ur.UserId == userId)
+                .Join(_context.RolePermissions,
+                    ur => ur.RoleId,
+                    rp => rp.RoleId,
+                    (ur, rp) => rp)
+                .Join(_context.Permissions,
+                    rp => rp.PermissionId,
+                    p => p.Id,
+                    (rp, p) => p)
+                .Where(p => p.IsActive)
+                .Select(p => new { p.Resource, p.Action })
+                .Distinct()
+                .ToListAsync();
+
+            // Resource bo'yicha grouping
+            var grouped = permissions
+                .GroupBy(p => p.Resource)
+                .Select(g => new Dictionary<string, List<string>>
+                {
+                    { g.Key, g.Select(x => x.Action).OrderBy(a => a).ToList() }
+                })
+                .ToList();
+
+            _logger.LogInformation("Retrieved {Count} grouped permissions for user {UserId}", grouped.Count, userId);
+
+            return grouped;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting grouped permissions for user {UserId}", userId);
+            return new List<Dictionary<string, List<string>>>();
+        }
+    }
 }

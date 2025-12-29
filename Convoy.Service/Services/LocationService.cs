@@ -1,3 +1,4 @@
+using AutoMapper;
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Convoy.Service.Common;
@@ -13,17 +14,20 @@ namespace Convoy.Service.Services;
 public class LocationService : ILocationService
 {
     private readonly ILocationRepository _locationRepository;
+    private readonly IMapper _mapper;
     private readonly ILogger<LocationService> _logger;
     private readonly object? _locationHubContext;
     private readonly ITelegramService? _telegramService;
 
     public LocationService(
         ILocationRepository locationRepository,
+        IMapper mapper,
         ILogger<LocationService> logger,
         object? locationHubContext = null,
         ITelegramService? telegramService = null)
     {
         _locationRepository = locationRepository;
+        _mapper = mapper;
         _logger = logger;
         _locationHubContext = locationHubContext;
         _telegramService = telegramService;
@@ -114,7 +118,7 @@ public class LocationService : ILocationService
             _logger.LogInformation("User {UserId} uchun location yaratildi, ID={LocationId}", userId, insertedId);
 
             // Response DTO yaratish
-            var responseDto = MapToDto(location);
+            var responseDto = _mapper.Map<LocationResponseDto>(location);
 
             // SignalR orqali real-time broadcast
             if (_locationHubContext != null)
@@ -192,7 +196,7 @@ public class LocationService : ILocationService
                 );
             }
 
-            var result = locations.Select(MapToDto);
+            var result = _mapper.Map<IEnumerable<LocationResponseDto>>(locations);
             return ServiceResult<IEnumerable<LocationResponseDto>>.Ok(
                 result,
                 "Location ma'lumotlari muvaffaqiyatli olindi");
@@ -213,7 +217,7 @@ public class LocationService : ILocationService
         try
         {
             var locations = await _locationRepository.GetLastLocationsAsync(userId, count);
-            var result = locations.Select(MapToDto).ToList();
+            var result = _mapper.Map<List<LocationResponseDto>>(locations);
 
             return ServiceResult<IEnumerable<LocationResponseDto>>.Ok(
                 result,
@@ -224,6 +228,32 @@ public class LocationService : ILocationService
             _logger.LogError(ex, "Error getting last locations for UserId={UserId}", userId);
             return ServiceResult<IEnumerable<LocationResponseDto>>.ServerError(
                 "Location ma'lumotlarini olishda xatolik yuz berdi");
+        }
+    }
+
+    /// <summary>
+    /// Barcha userlarning oxirgi location'larini olish (user ma'lumotlari bilan birga)
+    /// Bu method LocationService'da bo'lmasligi kerak, chunki u UserService'ga bog'liq
+    /// Shuning uchun faqat locationlarni qaytaramiz
+    /// </summary>
+    public async Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetAllUsersLatestLocationsAsync()
+    {
+        try
+        {
+            var locations = await _locationRepository.GetAllUsersLatestLocationsAsync();
+            var result = _mapper.Map<List<LocationResponseDto>>(locations);
+
+            _logger.LogInformation("Retrieved latest locations for {Count} users", result.Count);
+
+            return ServiceResult<IEnumerable<LocationResponseDto>>.Ok(
+                result,
+                $"Barcha userlarning oxirgi location'lari ({result.Count} ta user)");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all users latest locations");
+            return ServiceResult<IEnumerable<LocationResponseDto>>.ServerError(
+                "Barcha userlarning location'larini olishda xatolik yuz berdi");
         }
     }
 
@@ -288,7 +318,7 @@ public class LocationService : ILocationService
             }
 
             return ServiceResult<LocationResponseDto>.Ok(
-                MapToDto(location),
+                _mapper.Map<LocationResponseDto>(location),
                 "Location muvaffaqiyatli olindi");
         }
         catch (Exception ex)
@@ -299,54 +329,4 @@ public class LocationService : ILocationService
         }
     }
 
-    /// <summary>
-    /// Location entity'ni DTO'ga mapping
-    /// </summary>
-    private static LocationResponseDto MapToDto(Location location)
-    {
-        return new LocationResponseDto
-        {
-            Id = location.Id,
-            UserId = location.UserId,
-            RecordedAt = location.RecordedAt,
-
-            // Core location properties
-            Latitude = location.Latitude,
-            Longitude = location.Longitude,
-            Accuracy = location.Accuracy,
-            Speed = location.Speed,
-            Heading = location.Heading,
-            Altitude = location.Altitude,
-
-            // Flutter Background Geolocation - Extended Coords
-            EllipsoidalAltitude = location.EllipsoidalAltitude,
-            HeadingAccuracy = location.HeadingAccuracy,
-            SpeedAccuracy = location.SpeedAccuracy,
-            AltitudeAccuracy = location.AltitudeAccuracy,
-            Floor = location.Floor,
-
-            // Activity
-            ActivityType = location.ActivityType,
-            ActivityConfidence = location.ActivityConfidence,
-            IsMoving = location.IsMoving,
-
-            // Battery
-            BatteryLevel = location.BatteryLevel,
-            IsCharging = location.IsCharging,
-
-            // Flutter Background Geolocation - Location metadata
-            Timestamp = location.Timestamp,
-            Age = location.Age,
-            Event = location.Event,
-            Mock = location.Mock,
-            Sample = location.Sample,
-            Odometer = location.Odometer,
-            Uuid = location.Uuid,
-            Extras = location.Extras,
-
-            // Calculated fields
-            DistanceFromPrevious = location.DistanceFromPrevious,
-            CreatedAt = location.CreatedAt
-        };
-    }
 }

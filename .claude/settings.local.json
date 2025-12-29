@@ -41,7 +41,11 @@
       "Bash(python:*)",
       "Bash(powershell:*)",
       "Bash(cmd.exe /c type:*)",
-      "Bash(dotnet clean:*)"
+      "Bash(dotnet clean:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout /t 2 /nobreak)",
+      "Bash(cmd.exe /c taskkill /F /IM dotnet.exe)",
+      "Bash(timeout /t 5 /nobreak)"
     ]
   }
 }

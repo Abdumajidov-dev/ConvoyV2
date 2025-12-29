@@ -11,6 +11,7 @@ public class AuthService : IAuthService
     private readonly IOtpService _otpService;
     private readonly ISmsService _smsService;
     private readonly ITokenService _tokenService;
+    private readonly IPermissionService _permissionService;
     private readonly ILogger<AuthService> _logger;
     private readonly int[] _allowedPositionIds;
 
@@ -22,6 +23,7 @@ public class AuthService : IAuthService
         IOtpService otpService,
         ISmsService smsService,
         ITokenService tokenService,
+        IPermissionService permissionService,
         IConfiguration configuration,
         ILogger<AuthService> logger)
     {
@@ -29,6 +31,7 @@ public class AuthService : IAuthService
         _otpService = otpService;
         _smsService = smsService;
         _tokenService = tokenService;
+        _permissionService = permissionService;
         _logger = logger;
 
         // Allowed position IDs configuration dan o'qish
@@ -160,7 +163,7 @@ public class AuthService : IAuthService
         }
     }
 
-    public async Task<AuthResponseDto<PhpWorkerDto>> GetMeAsync(string token)
+    public async Task<AuthResponseDto<UserPermissionsDto>> GetMeAsync(string token)
     {
         try
         {
@@ -170,33 +173,45 @@ public class AuthService : IAuthService
             if (workerId == null)
             {
                 _logger.LogWarning("Invalid token provided");
-                return AuthResponseDto<PhpWorkerDto>.Failure("Token noto'g'ri yoki muddati tugagan");
+                return AuthResponseDto<UserPermissionsDto>.Failure("Token noto'g'ri yoki muddati tugagan");
             }
 
-            // Token ichidagi ma'lumotlarni qaytarish uchun tokenni parse qilish
+            // Token ichidagi ma'lumotlarni parse qilish
             var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
             var jwtToken = handler.ReadJwtToken(token);
 
-            var worker = new PhpWorkerDto
+            var userId = int.Parse(jwtToken.Claims.First(c => c.Type == "nameid").Value);
+            var userName = jwtToken.Claims.First(c => c.Type == "unique_name").Value;
+            var phoneNumber = jwtToken.Claims.First(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone").Value;
+
+            // User'ning role'larini olish
+            var rolesResult = await _permissionService.GetUserRolesAsync(userId);
+            var roles = rolesResult.Success ? rolesResult.Data : new List<Domain.Entities.Role>();
+
+            // User'ning permission'larini grouped format'da olish
+            var groupedPermissions = await _permissionService.GetUserPermissionsGroupedAsync(userId);
+
+            // Response DTO yaratish
+            var response = new UserPermissionsDto
             {
-                WorkerId = int.Parse(jwtToken.Claims.First(c => c.Type == "nameid").Value),
-                WorkerName = jwtToken.Claims.First(c => c.Type == "unique_name").Value,
-                PhoneNumber = jwtToken.Claims.First(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone").Value,
-                WorkerGuid = jwtToken.Claims.First(c => c.Type == "worker_guid").Value,
-                BranchGuid = jwtToken.Claims.First(c => c.Type == "branch_guid").Value,
-                BranchName = jwtToken.Claims.First(c => c.Type == "branch_name").Value,
-                PositionId = int.Parse(jwtToken.Claims.First(c => c.Type == "position_id").Value),
-                Image = null // Token ichida image yo'q
+                UserId = userId,
+                Name = userName,
+                Phone = phoneNumber,
+                Image = null, // Token ichida image yo'q
+                Role = roles?.FirstOrDefault()?.Name,
+                RoleId = roles?.Select(r => r.Id).ToList() ?? new List<long>(),
+                Permissions = groupedPermissions
             };
 
-            _logger.LogInformation("Successfully retrieved user data for worker {WorkerId}", workerId);
+            _logger.LogInformation("Successfully retrieved user data with role '{RoleName}', {RoleIdCount} role IDs and {PermissionCount} permission groups for user {UserId}",
+                response.Role ?? "no role", response.RoleId.Count, response.Permissions.Count, userId);
 
-            return AuthResponseDto<PhpWorkerDto>.Success(worker, "Foydalanuvchi ma'lumotlari");
+            return AuthResponseDto<UserPermissionsDto>.Success(response, "Foydalanuvchi ma'lumotlari");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting user data from token");
-            return AuthResponseDto<PhpWorkerDto>.Failure("Xatolik yuz berdi");
+            return AuthResponseDto<UserPermissionsDto>.Failure("Xatolik yuz berdi");
         }
     }
 }

@@ -13,104 +13,36 @@ public static class Roles
 
     /// <summary>
     /// Barcha rollar ro'yxatini olish (seeding uchun)
+    /// IMPORTANT: Permission assignments REMOVED - admin panel orqali boshqariladi
     /// </summary>
-    public static List<(string Name, string DisplayName, string Description, List<string> Permissions)> GetAll()
+    public static List<(string Name, string DisplayName, string Description)> GetAll()
     {
-        return new List<(string, string, string, List<string>)>
+        return new List<(string, string, string)>
         {
             (
                 SuperAdmin,
                 "Super Administrator",
-                "Sistema super administratori - barcha ruxsatlarga ega",
-                new List<string>
-                {
-                    // ALL PERMISSIONS
-                    Permissions.Users.View,
-                    Permissions.Users.Create,
-                    Permissions.Users.Update,
-                    Permissions.Users.Delete,
-                    Permissions.Users.Manage,
-                    Permissions.Locations.View,
-                    Permissions.Locations.Create,
-                    Permissions.Locations.Update,
-                    Permissions.Locations.Delete,
-                    Permissions.Locations.ViewAll,
-                    Permissions.Locations.Export,
-                    Permissions.Reports.View,
-                    Permissions.Reports.Export,
-                    Permissions.Reports.Create,
-                    Permissions.Roles.View,
-                    Permissions.Roles.Create,
-                    Permissions.Roles.Update,
-                    Permissions.Roles.Delete,
-                    Permissions.Roles.AssignPermissions,
-                    Permissions.PermissionsManagement.View,
-                    Permissions.PermissionsManagement.Assign,
-                    Permissions.Dashboard.ViewOwn,
-                    Permissions.Dashboard.ViewAll,
-                    Permissions.Dashboard.ViewStatistics,
-                    Permissions.Settings.View,
-                    Permissions.Settings.Update
-                }
+                "Sistema super administratori - role va permission'larni boshqaradi"
             ),
             (
                 Admin,
                 "Administrator",
-                "Sistema administratori - ko'pgina ruxsatlarga ega",
-                new List<string>
-                {
-                    Permissions.Users.View,
-                    Permissions.Users.Create,
-                    Permissions.Users.Update,
-                    Permissions.Locations.View,
-                    Permissions.Locations.ViewAll,
-                    Permissions.Locations.Export,
-                    Permissions.Reports.View,
-                    Permissions.Reports.Export,
-                    Permissions.Reports.Create,
-                    Permissions.Dashboard.ViewAll,
-                    Permissions.Dashboard.ViewStatistics,
-                    Permissions.Settings.View
-                }
+                "Sistema administratori - asosiy boshqaruv funksiyalari"
             ),
             (
                 Manager,
                 "Manager",
-                "Menejer - foydalanuvchilar va lokatsiyalarni boshqaradi",
-                new List<string>
-                {
-                    Permissions.Users.View,
-                    Permissions.Locations.View,
-                    Permissions.Locations.ViewAll,
-                    Permissions.Locations.Export,
-                    Permissions.Reports.View,
-                    Permissions.Reports.Export,
-                    Permissions.Dashboard.ViewAll,
-                    Permissions.Dashboard.ViewStatistics
-                }
+                "Menejer - foydalanuvchilar va hisobotlarni boshqaradi"
             ),
             (
                 Driver,
                 "Driver",
-                "Haydovchi - faqat o'z ma'lumotlarini ko'radi va yaratadi",
-                new List<string>
-                {
-                    Permissions.Locations.View,
-                    Permissions.Locations.Create,
-                    Permissions.Dashboard.ViewOwn
-                }
+                "Haydovchi - GPS tracking va o'z ma'lumotlarini yuboradi"
             ),
             (
                 Viewer,
                 "Viewer",
-                "Ko'ruvchi - faqat ma'lumotlarni ko'rish huquqi",
-                new List<string>
-                {
-                    Permissions.Users.View,
-                    Permissions.Locations.View,
-                    Permissions.Reports.View,
-                    Permissions.Dashboard.ViewOwn
-                }
+                "Ko'ruvchi - faqat ma'lumotlarni ko'rish huquqi"
             )
         };
     }

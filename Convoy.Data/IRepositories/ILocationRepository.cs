@@ -28,6 +28,11 @@ public interface ILocationRepository
     Task<IEnumerable<Location>> GetLastLocationsAsync(int userId, int count = 100);
 
     /// <summary>
+    /// Barcha userlarning oxirgi location'larini olish
+    /// </summary>
+    Task<IEnumerable<Location>> GetAllUsersLatestLocationsAsync();
+
+    /// <summary>
     /// User'ning kunlik yo'l masofalari (summary statistics)
     /// </summary>
     Task<Dictionary<DateTime, decimal>> GetDailyDistancesAsync(int userId, DateTime startDate, DateTime endDate);

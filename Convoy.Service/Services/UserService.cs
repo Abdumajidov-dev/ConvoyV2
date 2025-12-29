@@ -1,3 +1,4 @@
+using AutoMapper;
 using Convoy.Data.DbContexts;
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
@@ -13,15 +14,18 @@ public class UserService : IUserService
     private readonly AppDbConText _context;
     private readonly IRepository<User> _userRepository;
     private readonly ILogger<UserService> _logger;
+    private readonly IMapper _mapper;
 
     public UserService(
         AppDbConText context,
         IRepository<User> userRepository,
-        ILogger<UserService> logger)
+        ILogger<UserService> logger,
+        IMapper mapper)
     {
         _context = context;
         _userRepository = userRepository;
         _logger = logger;
+        _mapper = mapper;
     }
 
     public async Task<PaginatedResponse<UserResponseDto>> GetAllUsersAsync(UserQueryDto query)
@@ -56,7 +60,6 @@ public class UserService : IUserService
             {
                 Id = u.Id,
                 Name = u.Name,
-                Username = u.Username,
                 Phone = u.Phone,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt,
@@ -77,20 +80,10 @@ public class UserService : IUserService
     {
         var users = await _context.Users
             .Where(u => u.IsActive)
-            .OrderBy(u => u.Name)
-            .Select(u => new UserResponseDto
-            {
-                Id = u.Id,
-                Name = u.Name,
-                Username = u.Username,
-                Phone = u.Phone,
-                IsActive = u.IsActive,
-                CreatedAt = u.CreatedAt,
-                UpdatedAt = u.UpdatedAt
-            })
+            .OrderByDescending(u => u.CreatedAt)
             .ToListAsync();
 
-        return users;
+        return _mapper.Map<IEnumerable<UserResponseDto>>(users);
     }
 
     public async Task<UserResponseDto?> GetByIdAsync(long id)
@@ -102,16 +95,7 @@ public class UserService : IUserService
             return null;
         }
 
-        return new UserResponseDto
-        {
-            Id = user.Id,
-            Name = user.Name,
-            Username = user.Username,
-            Phone = user.Phone,
-            IsActive = user.IsActive,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
+        return _mapper.Map<UserResponseDto>(user);
     }
 
     public async Task<UserResponseDto> CreateAsync(CreateUserDto createDto)
@@ -137,30 +121,15 @@ public class UserService : IUserService
             }
         }
 
-        var user = new User
-        {
-            Name = createDto.Name,
-            Username = createDto.Username,
-            Phone = createDto.Phone,
-            IsActive = createDto.IsActive,
-            CreatedAt = DateTime.UtcNow
-        };
+        var user = _mapper.Map<User>(createDto);
+        user.CreatedAt = DateTime.UtcNow;
 
         await _userRepository.InsertAsync(user);
         await _userRepository.SaveAsync();
 
         _logger.LogInformation("User created: {Username} (ID: {UserId})", user.Username, user.Id);
 
-        return new UserResponseDto
-        {
-            Id = user.Id,
-            Name = user.Name,
-            Username = user.Username,
-            Phone = user.Phone,
-            IsActive = user.IsActive,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
+        return _mapper.Map<UserResponseDto>(user);
     }
 
     public async Task<UserResponseDto> UpdateAsync(long id, UpdateUserDto updateDto)
@@ -221,16 +190,7 @@ public class UserService : IUserService
 
         _logger.LogInformation("User updated: {Username} (ID: {UserId})", user.Username, user.Id);
 
-        return new UserResponseDto
-        {
-            Id = user.Id,
-            Name = user.Name,
-            Username = user.Username,
-            Phone = user.Phone,
-            IsActive = user.IsActive,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
+        return _mapper.Map<UserResponseDto>(user);
     }
 
     public async Task<bool> DeleteAsync(long id)

@@ -132,6 +132,7 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Joriy foydalanuvchi ma'lumotlarini olish (JWT token orqali)
+    /// Returns: user info + roles + grouped permissions (Flutter-friendly format)
     /// </summary>
     [HttpGet("me")]
     [Authorize]

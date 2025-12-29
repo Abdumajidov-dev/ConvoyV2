@@ -8,6 +8,7 @@ using Convoy.Service.Services.SmsProviders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using System.Text;
@@ -48,10 +49,11 @@ builder.Services.AddHttpClient<ITelegramService, TelegramService>();
 builder.Services.AddScoped<ILocationService>(sp =>
 {
     var locationRepo = sp.GetRequiredService<ILocationRepository>();
+    var mapper = sp.GetRequiredService<AutoMapper.IMapper>();
     var logger = sp.GetRequiredService<ILogger<LocationService>>();
     var hubContext = sp.GetService<IHubContext<Convoy.Api.Hubs.LocationHub>>();
     var telegramService = sp.GetService<ITelegramService>();
-    return new LocationService(locationRepo, logger, hubContext, telegramService);
+    return new LocationService(locationRepo, mapper, logger, hubContext, telegramService);
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -60,8 +62,14 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ISmsService, CompositeSmsService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 
+// AutoMapper
+builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
+
 // Permission service
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+
+// Role service
+builder.Services.AddScoped<IRoleService, RoleService>();
 
 // Background services (ordering matters - DatabaseInitializer birinchi)
 builder.Services.AddHostedService<DatabaseInitializerService>();

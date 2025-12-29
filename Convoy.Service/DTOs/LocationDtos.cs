@@ -182,3 +182,20 @@ public class DailySummaryQueryDto
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
 }
+
+/// <summary>
+/// User ma'lumotlari va oxirgi location bilan birga
+/// Barcha userlarning oxirgi locationlarini olish uchun ishlatiladi
+/// </summary>
+public class UserWithLatestLocationDto
+{
+    // User ma'lumotlari
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string? Image { get; set; }
+    public bool IsActive { get; set; }
+
+    // Oxirgi location (null bo'lishi mumkin agar user hali location yubormagan bo'lsa)
+    public LocationResponseDto? LatestLocation { get; set; }
+}

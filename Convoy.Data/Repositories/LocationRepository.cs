@@ -195,6 +195,42 @@ public class LocationRepository : ILocationRepository
     }
 
     /// <summary>
+    /// Barcha userlarning oxirgi location'larini olish
+    /// </summary>
+    public async Task<IEnumerable<Location>> GetAllUsersLatestLocationsAsync()
+    {
+        const string sql = @"
+            SELECT DISTINCT ON (user_id)
+                id, user_id as UserId, recorded_at as RecordedAt,
+                latitude, longitude, accuracy, speed, heading, altitude,
+                ellipsoidal_altitude as EllipsoidalAltitude,
+                heading_accuracy as HeadingAccuracy,
+                speed_accuracy as SpeedAccuracy,
+                altitude_accuracy as AltitudeAccuracy,
+                floor,
+                activity_type as ActivityType, activity_confidence as ActivityConfidence,
+                is_moving as IsMoving, battery_level as BatteryLevel,
+                is_charging as IsCharging,
+                timestamp, age, event, mock, sample, odometer, uuid, extras,
+                distance_from_previous as DistanceFromPrevious,
+                created_at as CreatedAt
+            FROM locations
+            ORDER BY user_id, recorded_at DESC";
+
+        try
+        {
+            var locations = await _connection.QueryAsync<Location>(sql);
+            _logger.LogInformation("Retrieved latest locations for {Count} users", locations.Count());
+            return locations;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all users latest locations");
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Kunlik yo'l masofalarini olish (summary statistics)
     /// </summary>
     public async Task<Dictionary<DateTime, decimal>> GetDailyDistancesAsync(int userId, DateTime startDate, DateTime endDate)

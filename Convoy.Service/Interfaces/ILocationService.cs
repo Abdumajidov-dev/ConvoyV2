@@ -25,6 +25,11 @@ public interface ILocationService
     Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetLastLocationsAsync(int userId, int count = 100);
 
     /// <summary>
+    /// Barcha userlarning oxirgi location'larini olish
+    /// </summary>
+    Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetAllUsersLatestLocationsAsync();
+
+    /// <summary>
     /// Kunlik statistikalarni olish
     /// </summary>
     Task<ServiceResult<IEnumerable<DailyStatisticsDto>>> GetDailyStatisticsAsync(DailySummaryQueryDto query);
