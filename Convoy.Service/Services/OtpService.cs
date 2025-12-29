@@ -4,6 +4,8 @@ using Convoy.Service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Linq;
+
 
 namespace Convoy.Service.Services;
 
@@ -14,6 +16,7 @@ public class OtpService : IOtpService
     private readonly int _otpExpirationMinutes;
     private readonly int _otpLength;
     private readonly int _otpRateLimitSeconds;
+    private readonly Dictionary<string, string> _testPhoneNumbers;
 
     public OtpService(AppDbConText context, IConfiguration configuration, ILogger<OtpService> logger)
     {
@@ -22,10 +25,46 @@ public class OtpService : IOtpService
         _otpExpirationMinutes = int.TryParse(configuration["Auth:OtpExpirationMinutes"], out var expMin) ? expMin : 5;
         _otpLength = int.TryParse(configuration["Auth:OtpLength"], out var len) ? len : 6;
         _otpRateLimitSeconds = int.TryParse(configuration["Auth:OtpRateLimitSeconds"], out var rateLimit) ? rateLimit : 60;
+        
+        // Test telefon raqamlarini yuklash
+        _testPhoneNumbers = new Dictionary<string, string>();
+        var testPhoneSection = configuration.GetSection("Auth:TestPhoneNumbers");
+        if (testPhoneSection.Exists())
+        {
+            foreach (var item in testPhoneSection.GetChildren())
+            {
+                _testPhoneNumbers[item.Key] = item.Value ?? "1111";
+            }
+            _logger.LogInformation("Loaded {Count} test phone numbers for development", _testPhoneNumbers.Count);
+        }
     }
 
     public async Task<string> GenerateOtpAsync(string phoneNumber)
     {
+        // Test telefon raqamini tekshirish
+        var normalizedPhone = NormalizePhoneNumber(phoneNumber);
+        if (_testPhoneNumbers.TryGetValue(normalizedPhone, out var fixedCode))
+        {
+            _logger.LogWarning("🧪 [TEST MODE] Using fixed OTP code for test phone: {Phone} → {Code}", 
+                phoneNumber, fixedCode);
+            
+            // Test raqamlar uchun ham database'ga yozamiz (consistency uchun)
+            var now = DateTime.UtcNow;
+            var otpCode = new OtpCode
+            {
+                PhoneNumber = phoneNumber,
+                Code = fixedCode,
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(_otpExpirationMinutes),
+                IsUsed = false
+            };
+
+            _context.OtpCodes.Add(otpCode);
+            await _context.SaveChangesAsync();
+
+            return fixedCode;
+        }
+
         // Eski OTP kodlarni bekor qilish (bir telefon uchun faqat bitta aktiv OTP)
         var existingOtps = await _context.OtpCodes
             .Where(o => o.PhoneNumber == phoneNumber && !o.IsUsed)
@@ -136,5 +175,23 @@ public class OtpService : IOtpService
         }
 
         return code;
+    }
+
+    /// <summary>
+    /// Telefon raqamni normalize qilish (test raqamlarni tekshirish uchun)
+    /// Masalan: +998941033001, 998941033001, 941033001 → 941033001
+    /// </summary>
+    private string NormalizePhoneNumber(string phoneNumber)
+    {
+        // Barcha non-digit belgilarni olib tashlash
+        var digitsOnly = new string(phoneNumber.Where(char.IsDigit).ToArray());
+        
+        // Agar 998 bilan boshlansa, uni olib tashlash
+        if (digitsOnly.StartsWith("998"))
+        {
+            digitsOnly = digitsOnly.Substring(3);
+        }
+        
+        return digitsOnly;
     }
 }
