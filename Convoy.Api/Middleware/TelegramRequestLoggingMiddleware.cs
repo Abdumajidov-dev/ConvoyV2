@@ -17,8 +17,10 @@ public class TelegramRequestLoggingMiddleware
         HttpContext context,
         ITelegramService telegramService)
     {
-        // Faqat POST / PUT larni log qilamiz (xohlasang o‘zgartirasan)
-        if (context.Request.Method is not ("POST" or "PUT"))
+        // Faqat location POST requestlarini Telegramga yuborish
+        var shouldLog = ShouldLogRequest(context);
+        
+        if (!shouldLog)
         {
             await _next(context);
             return;
@@ -60,6 +62,29 @@ public class TelegramRequestLoggingMiddleware
         );
 
         await _next(context);
+    }
+
+    /// <summary>
+    /// Qaysi requestlarni Telegramga yuborish kerakligini aniqlaydi
+    /// </summary>
+    private static bool ShouldLogRequest(HttpContext context)
+    {
+        var path = context.Request.Path.Value?.ToLower() ?? "";
+        var method = context.Request.Method.ToUpper();
+
+        // Faqat location POST requestlari
+        if (method == "POST" && path.Contains("/api/location"))
+        {
+            return true;
+        }
+
+        // Agar boshqa endpoint'larni ham qo'shmoqchi bo'lsangiz, shu yerga qo'shing:
+        // if (method == "POST" && path.Contains("/api/user"))
+        // {
+        //     return true;
+        // }
+
+        return false;
     }
 
     private static object TryParseJson(string body)
