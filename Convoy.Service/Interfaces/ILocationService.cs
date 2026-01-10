@@ -15,9 +15,14 @@ public interface ILocationService
     Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, LocationDataDto locationData);
 
     /// <summary>
-    /// User location'larini olish
+    /// User location'larini olish (query params - eski usul)
     /// </summary>
     Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetUserLocationsAsync(LocationQueryDto query);
+
+    /// <summary>
+    /// Bitta userning locationlarini olish (body orqali filterlar, user_id route'da)
+    /// </summary>
+    Task<ServiceResult<IEnumerable<LocationResponseDto>>> GetSingleUserLocationsAsync(int userId, SingleUserLocationQueryDto query);
 
     /// <summary>
     /// User'ning oxirgi location'larini olish
@@ -38,4 +43,10 @@ public interface ILocationService
     /// Location by ID olish
     /// </summary>
     Task<ServiceResult<LocationResponseDto>> GetLocationByIdAsync(long id, DateTime recordedAt);
+
+    /// <summary>
+    /// Ko'p userlarning locationlarini olish (body orqali user_ids YOKI branch_guid va filterlar)
+    /// User ma'lumotlari bilan birga locations array qaytaradi
+    /// </summary>
+    Task<ServiceResult<IEnumerable<UserWithLocationsDto>>> GetMultipleUsersLocationsAsync(MultipleUsersLocationQueryDto query, IUserService? userService = null);
 }

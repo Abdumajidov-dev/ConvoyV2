@@ -14,6 +14,7 @@ public class AppDbConText : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<OtpCode> OtpCodes { get; set; }
     public DbSet<TokenBlacklist> TokenBlacklists { get; set; }
+    public DbSet<UserStatusReport> userStatusReports { get; set; }
 
     // Permission system entities
     public DbSet<Role> Roles { get; set; }

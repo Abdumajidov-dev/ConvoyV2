@@ -118,11 +118,11 @@ public class LocationRepository : ILocationRepository
     }
 
     /// <summary>
-    /// User'ning location'larini vaqt oralig'ida olish
+    /// User'ning location'larini vaqt oralig'ida olish (vaqt string filtri bilan: "HH:MM")
     /// </summary>
-    public async Task<IEnumerable<Location>> GetUserLocationsAsync(int userId, DateTime startDate, DateTime endDate)
+    public async Task<IEnumerable<Location>> GetUserLocationsAsync(int userId, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null)
     {
-        const string sql = @"
+        var sqlBuilder = @"
             SELECT
                 id, user_id as UserId, recorded_at as RecordedAt,
                 latitude, longitude, accuracy, speed, heading, altitude,
@@ -140,13 +140,71 @@ public class LocationRepository : ILocationRepository
             FROM locations
             WHERE user_id = @UserId
                 AND recorded_at >= @StartDate
-                AND recorded_at < @EndDate
+                AND recorded_at < @EndDate";
+
+        // Time string'larni parse qilish
+        int? startHour = null, startMinute = null, endHour = null, endMinute = null;
+
+        if (!string.IsNullOrWhiteSpace(startTime))
+        {
+            var parts = startTime.Split(':');
+            if (parts.Length == 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m))
+            {
+                startHour = h;
+                startMinute = m;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(endTime))
+        {
+            var parts = endTime.Split(':');
+            if (parts.Length == 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m))
+            {
+                endHour = h;
+                endMinute = m;
+            }
+        }
+
+        // Vaqt filtri qo'shish (agar berilgan bo'lsa)
+        if (startHour.HasValue && startMinute.HasValue && endHour.HasValue && endMinute.HasValue)
+        {
+            // Ikkala vaqt ham berilgan: start_time >= X:Y AND end_time <= A:B
+            sqlBuilder += @"
+                AND (
+                    EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute
+                    AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute
+                )";
+        }
+        else if (startHour.HasValue && startMinute.HasValue)
+        {
+            // Faqat start time berilgan: >= X:Y
+            sqlBuilder += @"
+                AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute";
+        }
+        else if (endHour.HasValue && endMinute.HasValue)
+        {
+            // Faqat end time berilgan: <= A:B
+            sqlBuilder += @"
+                AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute";
+        }
+
+        sqlBuilder += @"
             ORDER BY recorded_at DESC";
 
         try
         {
-            var locations = await _connection.QueryAsync<Location>(sql, new { UserId = userId, StartDate = startDate, EndDate = endDate });
-            _logger.LogInformation("Retrieved {Count} locations for UserId={UserId}", locations.Count(), userId);
+            var locations = await _connection.QueryAsync<Location>(sqlBuilder, new
+            {
+                UserId = userId,
+                StartDate = startDate,
+                EndDate = endDate,
+                StartHour = startHour,
+                StartMinute = startMinute,
+                EndHour = endHour,
+                EndMinute = endMinute
+            });
+            _logger.LogInformation("Retrieved {Count} locations for UserId={UserId} (StartTime={StartTime}, EndTime={EndTime})",
+                locations.Count(), userId, startTime, endTime);
             return locations;
         }
         catch (Exception ex)
@@ -368,5 +426,120 @@ public class LocationRepository : ILocationRepository
     private static double DegreesToRadians(double degrees)
     {
         return degrees * Math.PI / 180.0;
+    }
+
+    /// <summary>
+    /// Ko'p userlarning locationlarini vaqt oralig'ida olish (vaqt string filtri bilan: "HH:MM")
+    /// </summary>
+    public async Task<IEnumerable<Location>> GetMultipleUsersLocationsAsync(List<int> userIds, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null, int? limitPerUser = null)
+    {
+        if (userIds == null || !userIds.Any())
+        {
+            _logger.LogWarning("GetMultipleUsersLocationsAsync called with empty userIds list");
+            return Enumerable.Empty<Location>();
+        }
+
+        var sqlBuilder = @"
+            SELECT * FROM (
+                SELECT
+                    id, user_id as UserId, recorded_at as RecordedAt,
+                    latitude, longitude, accuracy, speed, heading, altitude,
+                    ellipsoidal_altitude as EllipsoidalAltitude,
+                    heading_accuracy as HeadingAccuracy,
+                    speed_accuracy as SpeedAccuracy,
+                    altitude_accuracy as AltitudeAccuracy,
+                    floor,
+                    activity_type as ActivityType, activity_confidence as ActivityConfidence,
+                    is_moving as IsMoving, battery_level as BatteryLevel,
+                    is_charging as IsCharging,
+                    timestamp, age, event, mock, sample, odometer, uuid, extras,
+                    distance_from_previous as DistanceFromPrevious,
+                    created_at as CreatedAt,
+                    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY recorded_at DESC) as row_num
+                FROM locations
+                WHERE user_id = ANY(@UserIds)
+                    AND recorded_at >= @StartDate
+                    AND recorded_at < @EndDate";
+
+        // Time string'larni parse qilish
+        int? startHour = null, startMinute = null, endHour = null, endMinute = null;
+
+        if (!string.IsNullOrWhiteSpace(startTime))
+        {
+            var parts = startTime.Split(':');
+            if (parts.Length == 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m))
+            {
+                startHour = h;
+                startMinute = m;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(endTime))
+        {
+            var parts = endTime.Split(':');
+            if (parts.Length == 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m))
+            {
+                endHour = h;
+                endMinute = m;
+            }
+        }
+
+        // Vaqt filtri qo'shish
+        if (startHour.HasValue && startMinute.HasValue && endHour.HasValue && endMinute.HasValue)
+        {
+            sqlBuilder += @"
+                    AND (
+                        EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute
+                        AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute
+                    )";
+        }
+        else if (startHour.HasValue && startMinute.HasValue)
+        {
+            sqlBuilder += @"
+                    AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute";
+        }
+        else if (endHour.HasValue && endMinute.HasValue)
+        {
+            sqlBuilder += @"
+                    AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute";
+        }
+
+        sqlBuilder += @"
+            ) AS ranked_locations
+            WHERE 1=1";
+
+        // Har bir user uchun limit
+        if (limitPerUser.HasValue && limitPerUser.Value > 0)
+        {
+            sqlBuilder += @"
+                AND row_num <= @LimitPerUser";
+        }
+
+        sqlBuilder += @"
+            ORDER BY UserId, RecordedAt DESC";
+
+        try
+        {
+            var locations = await _connection.QueryAsync<Location>(sqlBuilder, new
+            {
+                UserIds = userIds.ToArray(),
+                StartDate = startDate,
+                EndDate = endDate,
+                StartHour = startHour,
+                StartMinute = startMinute,
+                EndHour = endHour,
+                EndMinute = endMinute,
+                LimitPerUser = limitPerUser
+            });
+
+            _logger.LogInformation("Retrieved {Count} locations for {UserCount} users (StartTime={StartTime}, EndTime={EndTime}, LimitPerUser={LimitPerUser})",
+                locations.Count(), userIds.Count, startTime, endTime, limitPerUser);
+            return locations;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting locations for multiple users (UserIds={UserIds})", string.Join(",", userIds));
+            throw;
+        }
     }
 }

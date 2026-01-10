@@ -144,15 +144,24 @@ public class AuthService : IAuthService
             // JWT token generatsiya qilish
             var token = _tokenService.GenerateToken(worker);
 
+            // Token expiration time olish
+            var expiresAt = _tokenService.GetExpiryFromToken(token);
+            var expiresInSeconds = expiresAt.HasValue
+                ? (long)(expiresAt.Value - DateTime.UtcNow).TotalSeconds
+                : 0;
+
             var response = new VerifyOtpResponseDto
             {
-                Token = token
+                Token = token,
+                ExpiresAt = expiresAt ?? DateTime.UtcNow,
+                ExpiresInSeconds = expiresInSeconds
             };
 
             // Cache dan o'chirish
             _workerCache.Remove(phoneNumber);
 
-            _logger.LogInformation("Successfully authenticated worker {WorkerId}", worker.WorkerId);
+            _logger.LogInformation("Successfully authenticated worker {WorkerId}, token expires at {ExpiresAt}",
+                worker.WorkerId, expiresAt);
 
             return AuthResponseDto<VerifyOtpResponseDto>.Success(response, "Muvaffaqiyatli tizimga kirildi");
         }

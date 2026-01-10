@@ -75,7 +75,7 @@ public class TelegramRequestLoggingMiddleware
         // Faqat location POST requestlari
         if (method == "POST" && path.Contains("/api/location"))
         {
-            return true;
+            return false;
         }
 
         // Agar boshqa endpoint'larni ham qo'shmoqchi bo'lsangiz, shu yerga qo'shing:

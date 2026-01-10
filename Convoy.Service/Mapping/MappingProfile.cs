@@ -25,6 +25,9 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
             .ForMember(dest => dest.Name, opt => opt.MapFrom(src => src.Name))
             .ForMember(dest => dest.Phone, opt => opt.MapFrom(src => src.Phone))
+            .ForMember(dest => dest.BranchGuid, opt => opt.MapFrom(src => src.BranchGuid))
+            .ForMember(dest => dest.Branch, opt => opt.Ignore())  // Branch PHP API'dan olinadi, mapping yo'q
+            .ForMember(dest => dest.Image, opt => opt.MapFrom(src => src.Image))
             .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
             .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => src.CreatedAt))
             .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => src.UpdatedAt));
@@ -66,11 +69,5 @@ public class MappingProfile : Profile
         // RoleWithPermissions mapping
         CreateMap<Role, RoleWithPermissionsDto>()
             .ForMember(dest => dest.Permissions, opt => opt.Ignore()); // Service'da manual set qilinadi
-
-        // UserWithLatestLocation mapping
-        CreateMap<UserResponseDto, UserWithLatestLocationDto>()
-            .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => (int)src.Id))
-            .ForMember(dest => dest.Image, opt => opt.MapFrom(src => (string?)null)) // User entity'da image yo'q
-            .ForMember(dest => dest.LatestLocation, opt => opt.Ignore()); // Service'da manual set qilinadi
     }
 }

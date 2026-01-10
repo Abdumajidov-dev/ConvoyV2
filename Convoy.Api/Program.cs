@@ -91,7 +91,7 @@ builder.Services.AddAuthentication(options =>
     {
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidateLifetime = true,
+        ValidateLifetime = false, // Token expiration check o'chirilgan - token abadiy amal qiladi
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
@@ -176,8 +176,12 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
+        // Response serialization: PascalCase -> snake_case
         options.JsonSerializerOptions.PropertyNamingPolicy = new Convoy.Api.Helpers.SnakeCaseNamingPolicy();
         options.JsonSerializerOptions.DictionaryKeyPolicy = new Convoy.Api.Helpers.SnakeCaseNamingPolicy();
+
+        // Request deserialization: snake_case, camelCase, PascalCase -> C# property names (case-insensitive)
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 
 // Swagger/OpenAPI

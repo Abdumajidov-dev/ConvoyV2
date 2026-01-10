@@ -45,7 +45,9 @@
       "Bash(taskkill:*)",
       "Bash(timeout /t 2 /nobreak)",
       "Bash(cmd.exe /c taskkill /F /IM dotnet.exe)",
-      "Bash(timeout /t 5 /nobreak)"
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(docker-compose ps:*)",
+      "Bash(cmd.exe /c timeout /t 2 /nobreak)"
     ]
   }
 }

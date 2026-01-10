@@ -13,10 +13,16 @@ public class User : Auditable
     public string Name { get; set; } = string.Empty;
 
     [Column("username")]
-    public string Username { get; set; } = string.Empty;
+    public string? Username { get; set; }  // Nullable - ba'zi userlar uchun NULL bo'lishi mumkin
 
     [Column("phone")]
     public string? Phone { get; set; }
+
+    [Column("branch_guid")]
+    public string? BranchGuid { get; set; }
+
+    [Column("image")]
+    public string? Image { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;

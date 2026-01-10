@@ -23,7 +23,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Telefon raqamni tekshirish (PHP API orqali)
+    /// Telefon raqamni tekshirish ()
     /// </summary>
     [HttpPost("verify_number")]
     public async Task<IActionResult> VerifyNumber([FromBody] VerifyNumberRequest request)

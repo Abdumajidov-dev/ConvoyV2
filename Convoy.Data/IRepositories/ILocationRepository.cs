@@ -18,9 +18,9 @@ public interface ILocationRepository
     Task<IEnumerable<Location>> InsertBatchAsync(IEnumerable<Location> locations);
 
     /// <summary>
-    /// User'ning location'larini vaqt oralig'ida olish
+    /// User'ning location'larini vaqt oralig'ida olish (vaqt string filtri bilan: "HH:MM")
     /// </summary>
-    Task<IEnumerable<Location>> GetUserLocationsAsync(int userId, DateTime startDate, DateTime endDate);
+    Task<IEnumerable<Location>> GetUserLocationsAsync(int userId, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null);
 
     /// <summary>
     /// User'ning oxirgi N ta location'ini olish
@@ -56,4 +56,9 @@ public interface ILocationRepository
     /// Ikki nuqta orasidagi masofani hisoblash (Haversine formula)
     /// </summary>
     double CalculateDistance(decimal lat1, decimal lon1, decimal lat2, decimal lon2);
+
+    /// <summary>
+    /// Ko'p userlarning locationlarini vaqt oralig'ida olish (vaqt string filtri bilan: "HH:MM")
+    /// </summary>
+    Task<IEnumerable<Location>> GetMultipleUsersLocationsAsync(List<int> userIds, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null, int? limitPerUser = null);
 }

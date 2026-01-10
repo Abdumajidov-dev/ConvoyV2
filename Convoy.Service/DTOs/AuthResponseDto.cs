@@ -1,4 +1,6 @@
-﻿namespace Convoy.Service.DTOs;
+﻿using System.Text.Json.Serialization;
+
+namespace Convoy.Service.DTOs;
 
 /// <summary>
 /// Barcha auth endpointlar uchun umumiy response struktura
@@ -6,8 +8,13 @@
 /// <typeparam name="T">Data turi</typeparam>
 public class AuthResponseDto<T>
 {
+    [JsonPropertyName("status")]
     public bool Status { get; set; }
+
+    [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("data")]
     public T? Data { get; set; }
 
     public static AuthResponseDto<T> Success(T data, string message = "Success")

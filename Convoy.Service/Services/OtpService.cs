@@ -16,8 +16,9 @@ public class OtpService : IOtpService
     private readonly int _otpExpirationMinutes;
     private readonly int _otpLength;
     private readonly int _otpRateLimitSeconds;
+    DateTime now = DateTime.UtcNow;
+    OtpCode otpCode1 = new OtpCode();
     private readonly Dictionary<string, string> _testPhoneNumbers;
-
     public OtpService(AppDbConText context, IConfiguration configuration, ILogger<OtpService> logger)
     {
         _context = context;
@@ -49,17 +50,17 @@ public class OtpService : IOtpService
                 phoneNumber, fixedCode);
             
             // Test raqamlar uchun ham database'ga yozamiz (consistency uchun)
-            var now = DateTime.UtcNow;
-            var otpCode = new OtpCode
+            otpCode1 = new OtpCode
             {
                 PhoneNumber = phoneNumber,
                 Code = fixedCode,
-                CreatedAt = now,
-                ExpiresAt = now.AddMinutes(_otpExpirationMinutes),
+                CreatedAt = DateTime.UtcNow,
+               // ExpiresAt = now.AddMinutes(_otpExpirationMinutes),
+               ExpiresAt = DateTime.UtcNow.AddMinutes(30), // Test kodlar 30 daqiqa amal qiladi
                 IsUsed = false
             };
 
-            _context.OtpCodes.Add(otpCode);
+            _context.OtpCodes.Add(otpCode1);
             await _context.SaveChangesAsync();
 
             return fixedCode;
