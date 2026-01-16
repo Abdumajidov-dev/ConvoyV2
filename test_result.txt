@@ -1,0 +1,21 @@
+============================================================
+ENCRYPTION TEST (Random IV like Flutter)
+============================================================
+[OK] Generated random IV: T1z7ETDgty/3G0Joclrrsg==
+[PLAIN] Plain text: {"phone_number": "916714835"}
+[ENCRYPTED] Encrypted (Base64): T1z7ETDgty/3G0JoclrrskAqBAgTbccdujN2QwfFZgsYRKBDfBTBof3ceyYSc1+Y
+[LENGTH] Length: 64 chars
+[BYTES] Combined bytes: IV(16) + Data(32) = 48
+
+============================================================
+DECRYPTION TEST (Backend should do this)
+============================================================
+[DECRYPTED] Decrypted: {"phone_number": "916714835"}
+[MATCH] Match: True
+
+============================================================
+CURL COMMAND TO TEST BACKEND
+============================================================
+curl -X POST http://localhost:5084/api/encryption-test/decrypt \
+  -H "Content-Type: text/plain" \
+  -d "T1z7ETDgty/3G0JoclrrskAqBAgTbccdujN2QwfFZgsYRKBDfBTBof3ceyYSc1+Y"

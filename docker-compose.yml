@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: convoy-postgres
+    environment:
+      POSTGRES_DB: convoy_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Danger124
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      # Database initialization script - AVTOMATIK RUN QILADI!
+      - ./database-setup.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - convoy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Convoy API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: convoy-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=convoy_db;Username=postgres;Password=Danger124;Include Error Detail=true
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - convoy-network
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+
+networks:
+  convoy-network:
+    driver: bridge

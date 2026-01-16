@@ -1,0 +1,257 @@
+### Convoy GPS Tracking API - Sample Requests
+### VS Code REST Client yoki Postman uchun
+
+@baseUrl = https://localhost:5001
+@userId = 1
+
+### ============================================
+### 1. Create Single Location
+### ============================================
+POST {{baseUrl}}/api/location
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "recordedAt": "2025-12-18T10:30:00Z",
+  "latitude": 41.311151,
+  "longitude": 69.279737,
+  "accuracy": 10.5,
+  "speed": 5.2,
+  "heading": 180.0,
+  "altitude": 420.0,
+  "activityType": "walking",
+  "activityConfidence": 85,
+  "isMoving": true,
+  "batteryLevel": 75,
+  "isCharging": false
+}
+
+### ============================================
+### 2. Create User Location Batch (YANGI - UserId + Locations Array)
+### ============================================
+POST {{baseUrl}}/api/location/user-batch
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "locations": [
+    {
+      "recordedAt": "2025-12-18T08:00:00Z",
+      "latitude": 41.311151,
+      "longitude": 69.279737,
+      "accuracy": 12.0,
+      "speed": 0.0,
+      "activityType": "still",
+      "isMoving": false,
+      "batteryLevel": 95,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:05:00Z",
+      "latitude": 41.312000,
+      "longitude": 69.280000,
+      "accuracy": 10.5,
+      "speed": 1.5,
+      "activityType": "walking",
+      "isMoving": true,
+      "batteryLevel": 94,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:10:00Z",
+      "latitude": 41.313000,
+      "longitude": 69.281000,
+      "accuracy": 8.0,
+      "speed": 12.5,
+      "activityType": "automotive",
+      "isMoving": true,
+      "batteryLevel": 93,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:15:00Z",
+      "latitude": 41.315000,
+      "longitude": 69.283000,
+      "accuracy": 7.5,
+      "speed": 15.0,
+      "activityType": "automotive",
+      "isMoving": true,
+      "batteryLevel": 92,
+      "isCharging": false
+    },
+    {
+      "recordedAt": "2025-12-18T08:20:00Z",
+      "latitude": 41.318000,
+      "longitude": 69.285000,
+      "accuracy": 9.0,
+      "speed": 0.5,
+      "activityType": "still",
+      "isMoving": false,
+      "batteryLevel": 91,
+      "isCharging": true
+    }
+  ]
+}
+
+### ============================================
+### 3. Create Batch Locations (ESKI - Har birida UserId bor)
+### ============================================
+POST {{baseUrl}}/api/location/batch
+Content-Type: application/json
+
+{
+  "locations": [
+    {
+      "userId": 1,
+      "recordedAt": "2025-12-18T08:00:00Z",
+      "latitude": 41.311151,
+      "longitude": 69.279737,
+      "accuracy": 12.0,
+      "speed": 0.0,
+      "activityType": "still",
+      "isMoving": false,
+      "batteryLevel": 95,
+      "isCharging": false
+    },
+    {
+      "userId": 1,
+      "recordedAt": "2025-12-18T08:05:00Z",
+      "latitude": 41.312000,
+      "longitude": 69.280000,
+      "accuracy": 10.5,
+      "speed": 1.5,
+      "activityType": "walking",
+      "isMoving": true,
+      "batteryLevel": 94,
+      "isCharging": false
+    },
+    {
+      "userId": 1,
+      "recordedAt": "2025-12-18T08:10:00Z",
+      "latitude": 41.313000,
+      "longitude": 69.281000,
+      "accuracy": 8.0,
+      "speed": 12.5,
+      "activityType": "automotive",
+      "isMoving": true,
+      "batteryLevel": 93,
+      "isCharging": false
+    }
+  ]
+}
+
+### ============================================
+### 4. Get User Locations (with date range)
+### ============================================
+GET {{baseUrl}}/api/location/user/{{userId}}?startDate=2025-12-01T00:00:00Z&endDate=2025-12-31T23:59:59Z
+
+### ============================================
+### 5. Get User Locations (with limit, no date range)
+### ============================================
+GET {{baseUrl}}/api/location/user/{{userId}}?limit=50
+
+### ============================================
+### 6. Get Last N Locations
+### ============================================
+GET {{baseUrl}}/api/location/user/{{userId}}/last?count=100
+
+### ============================================
+### 7. Get Last 10 Locations
+### ============================================
+GET {{baseUrl}}/api/location/user/{{userId}}/last?count=10
+
+### ============================================
+### 8. Get Daily Statistics (December 2025)
+### ============================================
+GET {{baseUrl}}/api/location/user/{{userId}}/daily-statistics?startDate=2025-12-01&endDate=2025-12-31
+
+### ============================================
+### 9. Get Daily Statistics (This Week)
+### ============================================
+GET {{baseUrl}}/api/location/user/{{userId}}/daily-statistics?startDate=2025-12-15&endDate=2025-12-22
+
+### ============================================
+### 10. Get Location by ID
+### ============================================
+GET {{baseUrl}}/api/location/1?recordedAt=2025-12-18T10:30:00Z
+
+### ============================================
+### 11. Create Location for Different User
+### ============================================
+POST {{baseUrl}}/api/location
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "recordedAt": "2025-12-18T11:00:00Z",
+  "latitude": 41.320000,
+  "longitude": 69.290000,
+  "accuracy": 15.0,
+  "speed": 3.5,
+  "heading": 90.0,
+  "altitude": 425.0,
+  "activityType": "cycling",
+  "activityConfidence": 75,
+  "isMoving": true,
+  "batteryLevel": 60,
+  "isCharging": false
+}
+
+### ============================================
+### 12. Simulating Real-time GPS Tracking
+### ============================================
+POST {{baseUrl}}/api/location
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "recordedAt": "{{$datetime iso8601}}",
+  "latitude": 41.311151,
+  "longitude": 69.279737,
+  "accuracy": 10.0,
+  "speed": 0.0,
+  "activityType": "still",
+  "isMoving": false,
+  "batteryLevel": 80,
+  "isCharging": false
+}
+
+### ============================================
+### Expected Response Examples
+### ============================================
+
+### Single Location Response:
+# {
+#   "id": 1,
+#   "userId": 1,
+#   "recordedAt": "2025-12-18T10:30:00Z",
+#   "latitude": 41.311151,
+#   "longitude": 69.279737,
+#   "accuracy": 10.5,
+#   "speed": 5.2,
+#   "heading": 180.0,
+#   "altitude": 420.0,
+#   "activityType": "walking",
+#   "activityConfidence": 85,
+#   "isMoving": true,
+#   "batteryLevel": 75,
+#   "isCharging": false,
+#   "distanceFromPrevious": 125.50,
+#   "createdAt": "2025-12-18T10:30:05Z"
+# }
+
+### Daily Statistics Response:
+# [
+#   {
+#     "date": "2025-12-18",
+#     "totalDistanceMeters": 5420.50,
+#     "totalDistanceKilometers": 5.42,
+#     "locationCount": 48
+#   },
+#   {
+#     "date": "2025-12-19",
+#     "totalDistanceMeters": 3210.00,
+#     "totalDistanceKilometers": 3.21,
+#     "locationCount": 32
+#   }
+# ]
