@@ -1,8 +1,8 @@
 # Convoy GPS Tracking API - Dockerfile
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
+# Railway dynamically assigns PORT - don't expose fixed ports
+# EXPOSE will be handled by Railway's PORT variable
 
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -35,7 +35,8 @@ COPY --from=publish /app/publish .
 # Environment variables
 ENV ASPNETCORE_ENVIRONMENT=Production
 
-# Railway will inject PORT environment variable at runtime
-# ASPNETCORE_URLS will be set via Railway environment variables as: http://0.0.0.0:$PORT
+# Railway provides PORT variable - bind to it
+# If PORT not set, default to 8080
+ENV PORT=8080
 
-ENTRYPOINT ["dotnet", "Convoy.Api.dll"]
+ENTRYPOINT ["sh", "-c", "dotnet Convoy.Api.dll --urls http://0.0.0.0:$PORT"]
