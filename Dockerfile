@@ -33,7 +33,9 @@ WORKDIR /app
 COPY --from=publish /app/publish .
 
 # Environment variables
-ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
+
+# Railway will inject PORT environment variable at runtime
+# ASPNETCORE_URLS will be set via Railway environment variables as: http://0.0.0.0:$PORT
 
 ENTRYPOINT ["dotnet", "Convoy.Api.dll"]

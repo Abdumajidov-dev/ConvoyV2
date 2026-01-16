@@ -227,13 +227,19 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments for Railway deployment
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Convoy API v1");
+    c.RoutePrefix = string.Empty; // Serve Swagger UI at root (/)
+});
 
-app.UseHttpsRedirection();
+// Disable HTTPS redirection in production (Railway handles HTTPS)
+if (!app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 
 // CORS middleware
 app.UseCors("AllowAll");
