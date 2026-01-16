@@ -182,7 +182,19 @@ public class FlutterLocationDto
     [JsonPropertyName("extras")]
     public object? Extras { get; set; }
 }
+public class ForTest
+{
+    [JsonPropertyName("latitude")]
+    public decimal Latitude { get; set; }
 
+    [JsonPropertyName("longitude")]
+    public decimal Longitude { get; set; }
+
+    [JsonPropertyName("speed")]
+    public decimal? Speed { get; set; }
+    [JsonPropertyName("recorded_at")]
+    public DateTime RecordedAt { get; set; }
+}
 /// <summary>
 /// Wrapped location request DTO (Flutter format)
 /// Body format: { "location": { "coords": {...}, ... } }
@@ -190,7 +202,8 @@ public class FlutterLocationDto
 public class LocationRequestWrapperDto
 {
     [JsonPropertyName("location")]
-    public FlutterLocationDto? Location { get; set; }
+    //public FlutterLocationDto? Location { get; set; }
+    public ForTest? Location { get; set; }
 }
 
 /// <summary>
@@ -325,10 +338,10 @@ public class LocationQueryDto
     [JsonPropertyName("end_date")]
     public DateTime? EndDate { get; set; }
 
-    [JsonPropertyName("start_time")]
+    [JsonPropertyName("start_hour")]
     public string? StartTime { get; set; }  // Format: "HH:MM" (masalan: "09:30", "14:45")
 
-    [JsonPropertyName("end_time")]
+    [JsonPropertyName("end_hour")]
     public string? EndTime { get; set; }    // Format: "HH:MM" (masalan: "17:30", "23:59")
 
     [JsonPropertyName("limit")]
@@ -383,10 +396,10 @@ public class MultipleUsersLocationQueryDto
     [JsonPropertyName("date")]
     public string Date { get; set; } = string.Empty;  // Format: "2026-01-07 03:54:32.302400" yoki "2026-01-07"
 
-    [JsonPropertyName("start_time")]
+    [JsonPropertyName("start_hour")]
     public string? StartTime { get; set; }  // Format: "HH:MM"
 
-    [JsonPropertyName("end_time")]
+    [JsonPropertyName("end_hour")]
     public string? EndTime { get; set; }    // Format: "HH:MM"
 
     [JsonPropertyName("limit")]

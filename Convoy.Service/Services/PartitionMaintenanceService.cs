@@ -1,4 +1,5 @@
 using Convoy.Data.IRepositories;
+using Convoy.Service.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -72,15 +73,15 @@ public class PartitionMaintenanceService : IHostedService
             var monthsToCreate = new List<DateTime>();
 
             // Oldingi 1 oy
-            monthsToCreate.Add(DateTime.UtcNow.AddMonths(-1));
+            monthsToCreate.Add(DateTimeExtensions.NowInApplicationTime().AddMonths(-1));
 
             // Hozirgi oy
-            monthsToCreate.Add(DateTime.UtcNow);
+            monthsToCreate.Add(DateTimeExtensions.NowInApplicationTime());
 
             // Keyingi 3 oy
             for (int i = 1; i <= 3; i++)
             {
-                monthsToCreate.Add(DateTime.UtcNow.AddMonths(i));
+                monthsToCreate.Add(DateTimeExtensions.NowInApplicationTime().AddMonths(i));
             }
 
             // Har bir oy uchun partition yaratish

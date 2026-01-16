@@ -13,6 +13,7 @@ public interface ILocationService
     /// Body to'g'ridan-to'g'ri LocationDataDto (encryption middleware yechib beradi)
     /// </summary>
     Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, LocationDataDto locationData);
+    Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, ForTest locationData);
 
     /// <summary>
     /// User location'larini olish (query params - eski usul)

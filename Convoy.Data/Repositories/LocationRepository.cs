@@ -165,27 +165,28 @@ public class LocationRepository : ILocationRepository
             }
         }
 
-        // Vaqt filtri qo'shish (agar berilgan bo'lsa)
+        // Vaqt filtri qo'shish (agar berilgan bo'lsa) - Toshkent timezone'ida (UTC+5)
+        // recorded_at'ni Toshkent vaqtiga konvertatsiya qilish uchun AT TIME ZONE ishlatish
         if (startHour.HasValue && startMinute.HasValue && endHour.HasValue && endMinute.HasValue)
         {
             // Ikkala vaqt ham berilgan: start_time >= X:Y AND end_time <= A:B
             sqlBuilder += @"
                 AND (
-                    EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute
-                    AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute
+                    EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') >= @StartHour * 60 + @StartMinute
+                    AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') <= @EndHour * 60 + @EndMinute
                 )";
         }
         else if (startHour.HasValue && startMinute.HasValue)
         {
             // Faqat start time berilgan: >= X:Y
             sqlBuilder += @"
-                AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute";
+                AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') >= @StartHour * 60 + @StartMinute";
         }
         else if (endHour.HasValue && endMinute.HasValue)
         {
             // Faqat end time berilgan: <= A:B
             sqlBuilder += @"
-                AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute";
+                AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') <= @EndHour * 60 + @EndMinute";
         }
 
         sqlBuilder += @"
@@ -484,24 +485,25 @@ public class LocationRepository : ILocationRepository
             }
         }
 
-        // Vaqt filtri qo'shish
+        // Vaqt filtri qo'shish (Toshkent timezone'ida - UTC+5)
+        // recorded_at'ni Toshkent vaqtiga konvertatsiya qilish uchun AT TIME ZONE ishlatish
         if (startHour.HasValue && startMinute.HasValue && endHour.HasValue && endMinute.HasValue)
         {
             sqlBuilder += @"
                     AND (
-                        EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute
-                        AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute
+                        EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') >= @StartHour * 60 + @StartMinute
+                        AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') <= @EndHour * 60 + @EndMinute
                     )";
         }
         else if (startHour.HasValue && startMinute.HasValue)
         {
             sqlBuilder += @"
-                    AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) >= @StartHour * 60 + @StartMinute";
+                    AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') >= @StartHour * 60 + @StartMinute";
         }
         else if (endHour.HasValue && endMinute.HasValue)
         {
             sqlBuilder += @"
-                    AND EXTRACT(HOUR FROM recorded_at) * 60 + EXTRACT(MINUTE FROM recorded_at) <= @EndHour * 60 + @EndMinute";
+                    AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') <= @EndHour * 60 + @EndMinute";
         }
 
         sqlBuilder += @"

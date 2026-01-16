@@ -3,6 +3,7 @@ using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Convoy.Service.Common;
 using Convoy.Service.DTOs;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -44,7 +45,8 @@ public class LocationService : ILocationService
             // RecordedAt bo'lmasa - hozirgi vaqtni set qilish
             if (!locationData.RecordedAt.HasValue)
             {
-                //locationData.RecordedAt = DateTime.UtcNow;
+                //locationData.RecordedAt =
+                //Time.UtcNow;
                 throw new CustomException(400, "recorded vaqtini berish majburish");
             }
 
@@ -65,6 +67,16 @@ public class LocationService : ILocationService
                 distanceFromPrevious = (decimal)distance;
             }
 
+            // Validation warnings for out-of-range values
+            if (locationData.Accuracy.HasValue && locationData.Accuracy.Value > 9999.99m)
+                _logger.LogWarning("Accuracy clamped: {Original} → 9999.99", locationData.Accuracy.Value);
+            if (locationData.Speed.HasValue && locationData.Speed.Value > 9999.99m)
+                _logger.LogWarning("Speed clamped: {Original} → 9999.99", locationData.Speed.Value);
+            if (locationData.Heading.HasValue && locationData.Heading.Value > 999.99m)
+                _logger.LogWarning("Heading clamped: {Original} → 999.99", locationData.Heading.Value);
+            if (locationData.Age.HasValue && locationData.Age.Value > 99999999.99m)
+                _logger.LogWarning("Age clamped: {Original} → 99999999.99", locationData.Age.Value);
+
             // Location entity yaratish
             var location = new Location
             {
@@ -75,17 +87,48 @@ public class LocationService : ILocationService
                 Latitude = locationData.Latitude,
                 Longitude = locationData.Longitude,
 
-                // Core location properties (OPTIONAL)
-                Accuracy = locationData.Accuracy,
-                Speed = locationData.Speed,
-                Heading = locationData.Heading,
-                Altitude = locationData.Altitude,
+                // Core location properties (OPTIONAL) - with validation to prevent overflow
+                // accuracy: max 9999.99 (DECIMAL(6,2))
+                Accuracy = locationData.Accuracy.HasValue && locationData.Accuracy.Value > 9999.99m
+                    ? 9999.99m
+                    : locationData.Accuracy,
 
-                // Flutter Background Geolocation - Extended Coords (OPTIONAL)
-                EllipsoidalAltitude = locationData.EllipsoidalAltitude,
-                HeadingAccuracy = locationData.HeadingAccuracy,
-                SpeedAccuracy = locationData.SpeedAccuracy,
-                AltitudeAccuracy = locationData.AltitudeAccuracy,
+                // speed: max 9999.99 (DECIMAL(6,2))
+                Speed = locationData.Speed.HasValue && locationData.Speed.Value > 9999.99m
+                    ? 9999.99m
+                    : locationData.Speed,
+
+                // heading: max 999.99 (DECIMAL(5,2))
+                Heading = locationData.Heading.HasValue && locationData.Heading.Value > 999.99m
+                    ? 999.99m
+                    : locationData.Heading,
+
+                // altitude: max 999999.99 (DECIMAL(8,2))
+                Altitude = locationData.Altitude.HasValue && locationData.Altitude.Value > 999999.99m
+                    ? 999999.99m
+                    : locationData.Altitude,
+
+                // Flutter Background Geolocation - Extended Coords (OPTIONAL) - with validation
+                // ellipsoidal_altitude: max 9999.999999 (DECIMAL(10,6))
+                EllipsoidalAltitude = locationData.EllipsoidalAltitude.HasValue && locationData.EllipsoidalAltitude.Value > 9999.999999m
+                    ? 9999.999999m
+                    : locationData.EllipsoidalAltitude,
+
+                // heading_accuracy: max 9999.999999 (DECIMAL(10,6))
+                HeadingAccuracy = locationData.HeadingAccuracy.HasValue && locationData.HeadingAccuracy.Value > 9999.999999m
+                    ? 9999.999999m
+                    : locationData.HeadingAccuracy,
+
+                // speed_accuracy: max 9999.999999 (DECIMAL(10,6))
+                SpeedAccuracy = locationData.SpeedAccuracy.HasValue && locationData.SpeedAccuracy.Value > 9999.999999m
+                    ? 9999.999999m
+                    : locationData.SpeedAccuracy,
+
+                // altitude_accuracy: max 9999.999999 (DECIMAL(10,6))
+                AltitudeAccuracy = locationData.AltitudeAccuracy.HasValue && locationData.AltitudeAccuracy.Value > 9999.999999m
+                    ? 9999.999999m
+                    : locationData.AltitudeAccuracy,
+
                 Floor = locationData.Floor,
 
                 // Activity (OPTIONAL)
@@ -97,19 +140,29 @@ public class LocationService : ILocationService
                 BatteryLevel = locationData.BatteryLevel,
                 IsCharging = locationData.IsCharging ?? false,
 
-                // Flutter Background Geolocation - Location metadata (OPTIONAL)
+                // Flutter Background Geolocation - Location metadata (OPTIONAL) - with validation
                 Timestamp = locationData.Timestamp,
-                Age = locationData.Age,
+
+                // age: max 99999999.99 (DECIMAL(10,2) - milliseconds)
+                Age = locationData.Age.HasValue && locationData.Age.Value > 99999999.99m
+                    ? 99999999.99m
+                    : locationData.Age,
+
                 Event = locationData.Event,
                 Mock = locationData.Mock,
                 Sample = locationData.Sample,
-                Odometer = locationData.Odometer,
+
+                // odometer: max 9999999999999.99 (DECIMAL(15,2) - meters)
+                Odometer = locationData.Odometer.HasValue && locationData.Odometer.Value > 9999999999999.99m
+                    ? 9999999999999.99m
+                    : locationData.Odometer,
+
                 Uuid = locationData.Uuid,
                 Extras = locationData.Extras,
 
                 // Calculated fields
-                DistanceFromPrevious = distanceFromPrevious,
-                CreatedAt = DateTime.UtcNow
+                DistanceFromPrevious = 0,
+                CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
 
             // Database'ga saqlash - ID bilan qaytadi
@@ -221,8 +274,8 @@ public class LocationService : ILocationService
         try
         {
             // Bir kunlik oraliq: query.Date kunining 00:00:00 dan 23:59:59 gacha
-            var startDate = query.Date.Date;  // 00:00:00
-            var endDate = startDate.AddDays(1);  // Keyingi kunning 00:00:00
+            // DateTimeExtensions orqali markazlashtirilgan timezone management
+            var (startDate, endDate) = query.Date.ToDateRange();
 
             var locations = await _locationRepository.GetUserLocationsAsync(
                 userId,
@@ -233,7 +286,7 @@ public class LocationService : ILocationService
             );
 
             var result = _mapper.Map<IEnumerable<LocationResponseDto>>(locations)
-                        .OrderByDescending(l => l.RecordedAt) // ?? reverse
+                        .OrderBy(l => l.RecordedAt) // ?? reverse
                         .ToList();
 
 
@@ -389,7 +442,7 @@ public class LocationService : ILocationService
                     "UserService not available");
             }
 
-            // Date string'ni parse qilish (format: "2026-01-07 03:54:32.302400" yoki "2026-01-07")
+            // Date string'ni parse qilish - DateTimeExtensions orqali
             if (string.IsNullOrWhiteSpace(query.Date))
             {
                 return ServiceResult<IEnumerable<UserWithLocationsDto>>.BadRequest(
@@ -399,17 +452,14 @@ public class LocationService : ILocationService
             DateTime parsedDate;
             try
             {
-                // Agar date ichida space bo'lsa (timestamp format), faqat date qismini olish
-                var dateString = query.Date.Contains(' ')
-                    ? query.Date.Split(' ')[0]
-                    : query.Date;
-
-                parsedDate = DateTime.Parse(dateString);
+                // DateTimeExtensions orqali har qanday formatdagi sanani parse qilish
+                parsedDate = query.Date.ParseToApplicationTime();
             }
-            catch (FormatException)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to parse date: {Date}", query.Date);
                 return ServiceResult<IEnumerable<UserWithLocationsDto>>.BadRequest(
-                    "date formati noto'g'ri (kutilgan format: 'yyyy-MM-dd' yoki 'yyyy-MM-dd HH:mm:ss')");
+                    $"date formati noto'g'ri: {query.Date}");
             }
 
             List<int> userIds;
@@ -454,8 +504,8 @@ public class LocationService : ILocationService
             }
 
             // Bir kunlik oraliq: parsedDate kunining 00:00:00 dan 23:59:59 gacha
-            var startDate = parsedDate.Date;  // 00:00:00
-            var endDate = startDate.AddDays(1);  // Keyingi kunning 00:00:00
+            // DateTimeExtensions orqali markazlashtirilgan timezone management
+            var (startDate, endDate) = parsedDate.ToDateRange();
 
             // Locationlarni olish
             var locations = await _locationRepository.GetMultipleUsersLocationsAsync(
@@ -475,7 +525,7 @@ public class LocationService : ILocationService
                                     .ToDictionary(
                                         g => g.Key,
                                         g => g
-                                            .OrderByDescending(l => l.RecordedAt) // ?? reverse
+                                            .OrderBy(l => l.RecordedAt) // ?? reverse
                                             .ToList()
                                     );
 
@@ -541,4 +591,83 @@ public class LocationService : ILocationService
         }
     }
 
+    public async Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, ForTest locationData)
+    {
+        try
+        {
+            // RecordedAt bo'lmasa - hozirgi vaqtni set qilish
+           
+
+            // User'ning oldingi location'ini olish (distance hisoblash uchun)
+            var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
+            var previousLocation = lastLocations.FirstOrDefault();
+
+            decimal? distanceFromPrevious = null;
+
+            if (previousLocation != null)
+            {
+                var distance = _locationRepository.CalculateDistance(
+                    previousLocation.Latitude,
+                    previousLocation.Longitude,
+                    locationData.Latitude,
+                    locationData.Longitude
+                );
+                distanceFromPrevious = (decimal)distance;
+            }
+
+
+
+            // Location entity yaratish
+            var location = new Location
+            {
+                UserId = userId,
+                RecordedAt = locationData.RecordedAt,
+
+                // Core location properties (REQUIRED)
+                Latitude = locationData.Latitude,
+                Longitude = locationData.Longitude,
+                Speed = locationData.Speed,
+
+                // Calculated fields
+                DistanceFromPrevious = 0,
+                CreatedAt = DateTimeExtensions.NowInApplicationTime()
+            };
+
+            // Database'ga saqlash - ID bilan qaytadi
+            var insertedId = await _locationRepository.InsertAsync(location);
+            location.Id = insertedId;
+
+            _logger.LogInformation("User {UserId} uchun location yaratildi, ID={LocationId}", userId, insertedId);
+
+            // Response DTO yaratish
+            var responseDto = _mapper.Map<LocationResponseDto>(location);
+
+            // Telegram kanalga xabar yuborish
+            if (_telegramService != null)
+            {
+                try
+                {
+                    await _telegramService.SendLocationDataAsync(
+                        userId,
+                        $"User {userId}",
+                        double.Parse(responseDto.Latitude.ToString()),
+                        double.Parse(responseDto.Longitude.ToString()),
+                        responseDto.RecordedAt
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send Telegram notification for UserId={UserId}", userId);
+                }
+            }
+
+            return ServiceResult<LocationResponseDto>.Created(responseDto, "Location muvaffaqiyatli yaratildi");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating location for UserId={UserId}", userId);
+            return ServiceResult<LocationResponseDto>.ServerError(
+                "Location yaratishda xatolik yuz berdi");
+        }
+    }
 }

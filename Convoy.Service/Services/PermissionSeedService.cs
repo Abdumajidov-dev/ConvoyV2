@@ -1,6 +1,7 @@
 using Convoy.Data.DbContexts;
 using Convoy.Domain.Constants;
 using Convoy.Domain.Entities;
+using Convoy.Service.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -81,7 +82,7 @@ public class PermissionSeedService : IHostedService
                         Action = action,
                         Description = description,
                         IsActive = true,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTimeExtensions.NowInApplicationTime()
                     };
 
                     context.Permissions.Add(permission);
@@ -106,7 +107,7 @@ public class PermissionSeedService : IHostedService
 
                     if (updated)
                     {
-                        existingPermission.UpdatedAt = DateTime.UtcNow;
+                        existingPermission.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
                         _logger.LogInformation("🔄 Updated permission: {Name}", name);
                     }
                 }
@@ -143,7 +144,7 @@ public class PermissionSeedService : IHostedService
                         DisplayName = displayName,
                         Description = description,
                         IsActive = true,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTimeExtensions.NowInApplicationTime()
                     };
 
                     context.Roles.Add(role);
@@ -168,7 +169,7 @@ public class PermissionSeedService : IHostedService
 
                     if (updated)
                     {
-                        existingRole.UpdatedAt = DateTime.UtcNow;
+                        existingRole.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
                         _logger.LogInformation("🔄 Updated role: {Name}", name);
                     }
                 }

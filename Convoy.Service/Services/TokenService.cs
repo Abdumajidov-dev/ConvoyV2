@@ -1,6 +1,7 @@
 ﻿using Convoy.Data.DbContexts;
 using Convoy.Domain.Entities;
 using Convoy.Service.DTOs;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -48,7 +49,7 @@ public class TokenService : ITokenService
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddHours(_expirationHours),
+            Expires = DateTimeExtensions.NowInApplicationTime().AddHours(_expirationHours),
             Issuer = _issuer,
             Audience = _audience,
             SigningCredentials = new SigningCredentials(
@@ -161,7 +162,7 @@ public class TokenService : ITokenService
             return false;
 
         return await _dbContext.TokenBlacklists
-            .AnyAsync(tb => tb.TokenJti == jti && tb.ExpiresAt > DateTime.UtcNow);
+            .AnyAsync(tb => tb.TokenJti == jti && tb.ExpiresAt > DateTimeExtensions.NowInApplicationTime());
     }
 
     public async Task<bool> BlacklistTokenAsync(string token, long userId, string reason = "logout")
@@ -189,7 +190,7 @@ public class TokenService : ITokenService
             {
                 TokenJti = jti,
                 UserId = userId,
-                BlacklistedAt = DateTime.UtcNow,
+                BlacklistedAt = DateTimeExtensions.NowInApplicationTime(),
                 ExpiresAt = expiry.Value,
                 Reason = reason
             };

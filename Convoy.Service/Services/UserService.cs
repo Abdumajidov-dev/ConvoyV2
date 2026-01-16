@@ -3,6 +3,7 @@ using Convoy.Data.DbContexts;
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Convoy.Service.DTOs;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -167,7 +168,7 @@ public class UserService : IUserService
     public async Task<IEnumerable<UserResponseDto>> GetAllActiveUsersAsync()
     {
         var users = await _context.Users
-            .Where(u => u.IsActive)
+            //.Where(u => u.IsActive)
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync();
 
@@ -254,7 +255,7 @@ public class UserService : IUserService
         }
 
         var user = _mapper.Map<User>(createDto);
-        user.CreatedAt = DateTime.UtcNow;
+        user.CreatedAt = DateTimeExtensions.NowInApplicationTime();
 
         await _userRepository.InsertAsync(user);
         await _userRepository.SaveAsync();
@@ -323,7 +324,7 @@ public class UserService : IUserService
             user.IsActive = updateDto.IsActive.Value;
         }
 
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
 
         await _userRepository.Update(user, id);
         await _userRepository.SaveAsync();
@@ -360,9 +361,9 @@ public class UserService : IUserService
         }
 
         // Soft delete
-        user.DeletedAt = DateTime.UtcNow;
+        user.DeletedAt = DateTimeExtensions.NowInApplicationTime();
         user.IsActive = false;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
 
         await _userRepository.Update(user, id);
         await _userRepository.SaveAsync();
@@ -401,7 +402,7 @@ public class UserService : IUserService
             var newReport = new UserStatusReport{
                 UserId = userId,
                 Status = isActive,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
             var resultReport = await _userStatusReportRepository.InsertAsync(newReport);
             if(resultReport is null)

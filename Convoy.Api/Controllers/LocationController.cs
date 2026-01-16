@@ -84,15 +84,15 @@ public class LocationController : ControllerBase
         var flutter = request.Location;
 
         // Validate coords
-        if (flutter.Coords == null)
-        {
-            return BadRequest(new ApiResponse<object>
-            {
-                Status = false,
-                Message = "Coords object bo'sh yoki mavjud emas",
-                Data = null
-            });
-        }
+        //if (flutter.Coords == null)
+        //{
+        //    return BadRequest(new ApiResponse<object>
+        //    {
+        //        Status = false,
+        //        Message = "Coords object bo'sh yoki mavjud emas",
+        //        Data = null
+        //    });
+        //}
 
         // Validate and sanitize battery level (0-100 oralig'ida bo'lishi kerak)
         int? batteryLevel = null;
@@ -110,44 +110,44 @@ public class LocationController : ControllerBase
         //}
 
         // Map Flutter format to LocationDataDto
-        var locationData = new LocationDataDto
-        {
-            // Core location from coords
-            Latitude = flutter.Coords.Latitude,
-            Longitude = flutter.Coords.Longitude,
-            Accuracy = flutter.Coords.Accuracy,
-            Speed = flutter.Coords.Speed,
-            Heading = flutter.Coords.Heading,
-            Altitude = flutter.Coords.Altitude,
+        //var locationData = new LocationDataDto
+        //{
+        //    // Core location from coords
+        //    Latitude = flutter.Coords.Latitude,
+        //    Longitude = flutter.Coords.Longitude,
+        //    Accuracy = flutter.Coords.Accuracy,
+        //    Speed = flutter.Coords.Speed,
+        //    Heading = flutter.Coords.Heading,
+        //    Altitude = flutter.Coords.Altitude,
 
-            // Extended coords
-            EllipsoidalAltitude = flutter.Coords.EllipsoidalAltitude,
-            HeadingAccuracy = flutter.Coords.HeadingAccuracy,
-            SpeedAccuracy = flutter.Coords.SpeedAccuracy,
-            AltitudeAccuracy = flutter.Coords.AltitudeAccuracy,
+        //    // Extended coords
+        //    EllipsoidalAltitude = flutter.Coords.EllipsoidalAltitude,
+        //    HeadingAccuracy = flutter.Coords.HeadingAccuracy,
+        //    SpeedAccuracy = flutter.Coords.SpeedAccuracy,
+        //    AltitudeAccuracy = flutter.Coords.AltitudeAccuracy,
 
-            // Activity
-            ActivityType = flutter.Activity?.Type,
-            ActivityConfidence = flutter.Activity?.Confidence,
-            IsMoving = flutter.IsMoving,
+        //    // Activity
+        //    ActivityType = flutter.Activity?.Type,
+        //    ActivityConfidence = flutter.Activity?.Confidence,
+        //    IsMoving = flutter.IsMoving,
 
-            // Battery (validated)
-            //BatteryLevel = batteryLevel,
-            //IsCharging = flutter.Battery?.IsCharging,
+        //    // Battery (validated)
+        //    //BatteryLevel = batteryLevel,
+        //    //IsCharging = flutter.Battery?.IsCharging,
 
-            // Metadata
-            RecordedAt = flutter.RecordedAt,
-            Timestamp = flutter.Timestamp,
-            Age = flutter.Age,
-            Odometer = flutter.Odometer,
-            Uuid = flutter.Uuid,
-            Extras = flutter.Extras != null ? System.Text.Json.JsonSerializer.Serialize(flutter.Extras) : null
-        };
+        //    // Metadata
+        //    RecordedAt = flutter.RecordedAt.Value,
+        //    Timestamp = flutter.Timestamp.Value,
+        //    Age = flutter.Age,
+        //    Odometer = flutter.Odometer,
+        //    Uuid = flutter.Uuid,
+        //    Extras = flutter.Extras != null ? System.Text.Json.JsonSerializer.Serialize(flutter.Extras) : null
+        //};
 
-        _logger.LogInformation("Creating location for UserId={UserId}, Lat={Lat}, Lon={Lon}",
-            userId.Value, locationData.Latitude, locationData.Longitude);
+        //_logger.LogInformation("Creating location for UserId={UserId}, Lat={Lat}, Lon={Lon}",
+        //    userId.Value, locationData.Latitude, locationData.Longitude);
 
-        var result = await _locationService.CreateUserLocationAsync((int)userId.Value, locationData);
+        var result = await _locationService.CreateUserLocationAsync((int)userId.Value, request.Location);
 
         var apiResponse = new ApiResponse<LocationResponseDto>
         {

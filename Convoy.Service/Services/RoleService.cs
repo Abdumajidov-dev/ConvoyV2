@@ -2,6 +2,7 @@ using Convoy.Data.DbContexts;
 using Convoy.Domain.Entities;
 using Convoy.Service.Common;
 using Convoy.Service.DTOs;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -148,7 +149,7 @@ public class RoleService : IRoleService
                 DisplayName = request.DisplayName,
                 Description = request.Description,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
 
             _context.Roles.Add(role);
@@ -209,7 +210,7 @@ public class RoleService : IRoleService
 
             if (updated)
             {
-                role.UpdatedAt = DateTime.UtcNow;
+                role.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
                 await _context.SaveChangesAsync();
 
                 _logger.LogInformation("Updated role {RoleName} (ID: {RoleId})", role.Name, role.Id);
@@ -254,7 +255,7 @@ public class RoleService : IRoleService
                 return ServiceResult<bool>.BadRequest("Ushbu rolga tayinlangan foydalanuvchilar mavjud. Avval ularni olib tashlang.");
 
             // Soft delete
-            role.DeletedAt = DateTime.UtcNow;
+            role.DeletedAt = DateTimeExtensions.NowInApplicationTime();
             role.IsActive = false;
             await _context.SaveChangesAsync();
 
@@ -281,7 +282,7 @@ public class RoleService : IRoleService
                 return ServiceResult<bool>.NotFound("Rol topilmadi");
 
             role.IsActive = isActive;
-            role.UpdatedAt = DateTime.UtcNow;
+            role.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
             await _context.SaveChangesAsync();
 
             var status = isActive ? "aktivlashtirildi" : "deaktivlashtirildi";

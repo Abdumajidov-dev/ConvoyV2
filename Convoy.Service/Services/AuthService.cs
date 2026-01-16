@@ -1,4 +1,5 @@
 ﻿using Convoy.Service.DTOs;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -146,14 +147,15 @@ public class AuthService : IAuthService
 
             // Token expiration time olish
             var expiresAt = _tokenService.GetExpiryFromToken(token);
+            var now = DateTimeExtensions.NowInApplicationTime();
             var expiresInSeconds = expiresAt.HasValue
-                ? (long)(expiresAt.Value - DateTime.UtcNow).TotalSeconds
+                ? (long)(expiresAt.Value - now).TotalSeconds
                 : 0;
 
             var response = new VerifyOtpResponseDto
             {
                 Token = token,
-                ExpiresAt = expiresAt ?? DateTime.UtcNow,
+                ExpiresAt = expiresAt ?? now,
                 ExpiresInSeconds = expiresInSeconds
             };
 

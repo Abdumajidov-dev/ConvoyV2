@@ -1,6 +1,7 @@
 using Convoy.Data.DbContexts;
 using Convoy.Domain.Entities;
 using Convoy.Service.Common;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -102,9 +103,9 @@ public class PermissionService : IPermissionService
             {
                 UserId = userId,
                 RoleId = roleId,
-                AssignedAt = DateTime.UtcNow,
+                AssignedAt = DateTimeExtensions.NowInApplicationTime(),
                 AssignedBy = assignedBy,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
 
             _context.UserRoles.Add(userRole);
@@ -171,9 +172,9 @@ public class PermissionService : IPermissionService
             {
                 RoleId = roleId,
                 PermissionId = permissionId,
-                GrantedAt = DateTime.UtcNow,
+                GrantedAt = DateTimeExtensions.NowInApplicationTime(),
                 GrantedBy = grantedBy,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
 
             _context.RolePermissions.Add(rolePermission);

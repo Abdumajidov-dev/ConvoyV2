@@ -1,5 +1,6 @@
 ﻿using Convoy.Data.DbContexts;
 using Convoy.Domain.Entities;
+using Convoy.Service.Extensions;
 using Convoy.Service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -16,8 +17,6 @@ public class OtpService : IOtpService
     private readonly int _otpExpirationMinutes;
     private readonly int _otpLength;
     private readonly int _otpRateLimitSeconds;
-    DateTime now = DateTime.UtcNow;
-    OtpCode otpCode1 = new OtpCode();
     private readonly Dictionary<string, string> _testPhoneNumbers;
     public OtpService(AppDbConText context, IConfiguration configuration, ILogger<OtpService> logger)
     {
@@ -50,17 +49,17 @@ public class OtpService : IOtpService
                 phoneNumber, fixedCode);
             
             // Test raqamlar uchun ham database'ga yozamiz (consistency uchun)
-            otpCode1 = new OtpCode
+            var now = DateTimeExtensions.NowInApplicationTime();
+            var otpCode = new OtpCode
             {
                 PhoneNumber = phoneNumber,
                 Code = fixedCode,
-                CreatedAt = DateTime.UtcNow,
-               // ExpiresAt = now.AddMinutes(_otpExpirationMinutes),
-               ExpiresAt = DateTime.UtcNow.AddMinutes(30), // Test kodlar 30 daqiqa amal qiladi
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(30), // Test kodlar 30 daqiqa amal qiladi
                 IsUsed = false
             };
 
-            _context.OtpCodes.Add(otpCode1);
+            _context.OtpCodes.Add(otpCode);
             await _context.SaveChangesAsync();
 
             return fixedCode;
@@ -77,7 +76,7 @@ public class OtpService : IOtpService
             var lastOtp = existingOtps.OrderByDescending(o => o.CreatedAt).FirstOrDefault();
             if (lastOtp != null)
             {
-                var timeSinceLastOtp = DateTime.UtcNow - lastOtp.CreatedAt;
+                var timeSinceLastOtp = DateTimeExtensions.NowInApplicationTime() - lastOtp.CreatedAt;
                 if (timeSinceLastOtp.TotalSeconds < _otpRateLimitSeconds)
                 {
                     var waitSeconds = (int)(_otpRateLimitSeconds - timeSinceLastOtp.TotalSeconds);
@@ -99,22 +98,22 @@ public class OtpService : IOtpService
 
         // Yangi OTP kod generatsiya qilish
         var code = GenerateRandomCode(_otpLength);
-        var now = DateTime.UtcNow;
+        var currentTime = DateTimeExtensions.NowInApplicationTime();
 
-        var otpCode = new OtpCode
+        var newOtpCode = new OtpCode
         {
             PhoneNumber = phoneNumber,
             Code = code,
-            CreatedAt = now,
-            ExpiresAt = now.AddMinutes(_otpExpirationMinutes),
+            CreatedAt = currentTime,
+            ExpiresAt = currentTime.AddMinutes(_otpExpirationMinutes),
             IsUsed = false
         };
 
-        _context.OtpCodes.Add(otpCode);
+        _context.OtpCodes.Add(newOtpCode);
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Generated OTP code for phone {Phone}, expires at {ExpiresAt}",
-            phoneNumber, otpCode.ExpiresAt);
+            phoneNumber, newOtpCode.ExpiresAt);
 
         // DEVELOPMENT: OTP kodni console ga chiqarish
         _logger.LogWarning("🔐 [DEVELOPMENT] OTP CODE FOR {Phone}: {Code}", phoneNumber, code);
@@ -151,7 +150,7 @@ public class OtpService : IOtpService
 
     public async Task CleanupExpiredOtpsAsync()
     {
-        var expiredDate = DateTime.UtcNow.AddDays(-1); // 1 kundan eski OTPlar
+        var expiredDate = DateTimeExtensions.NowInApplicationTime().AddDays(-1); // 1 kundan eski OTPlar
 
         var expiredOtps = await _context.OtpCodes
             .Where(o => o.CreatedAt < expiredDate)
