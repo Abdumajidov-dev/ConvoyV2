@@ -20,4 +20,8 @@
     <ProjectReference Include="..\Convoy.Domain\Convoy.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\*.sql" />
+  </ItemGroup>
+
 </Project>
