@@ -50,7 +50,11 @@
       "Bash(cmd.exe /c timeout /t 2 /nobreak)",
       "Bash(git push:*)",
       "Bash(git commit:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(where railway:*)",
+      "Bash(railway status:*)",
+      "Bash(cat:*)",
+      "Bash(git mv:*)"
     ]
   }
 }
