@@ -432,7 +432,7 @@ public class UserService : IUserService
     /// </summary>
     public async Task CreateAsync(User user)
     {
-        await _userRepository.CreateAsync(user);
+        await _userRepository.InsertAsync(user);
         await _userRepository.SaveAsync();
 
         _logger.LogInformation("User created with user_id={UserId}, Name={Name}",
@@ -444,7 +444,8 @@ public class UserService : IUserService
     /// </summary>
     public async Task UpdateAsync(long id, User user)
     {
-        var existingUser = await _userRepository.GetByIdAsync(id);
+        // Find existing user
+        var existingUser = await _context.Users.FindAsync(id);
         if (existingUser == null)
         {
             throw new InvalidOperationException($"User with id {id} not found");
@@ -459,7 +460,7 @@ public class UserService : IUserService
         existingUser.Image = user.Image;
         existingUser.IsActive = user.IsActive;
 
-        await _userRepository.SaveAsync();
+        await _context.SaveChangesAsync();
 
         _logger.LogInformation("User updated with user_id={UserId}, Name={Name}",
             user.UserId, user.Name);
