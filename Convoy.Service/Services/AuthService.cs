@@ -13,6 +13,7 @@ public class AuthService : IAuthService
     private readonly ISmsService _smsService;
     private readonly ITokenService _tokenService;
     private readonly IPermissionService _permissionService;
+    private readonly IUserService _userService;
     private readonly ILogger<AuthService> _logger;
     private readonly int[] _allowedPositionIds;
 
@@ -25,6 +26,7 @@ public class AuthService : IAuthService
         ISmsService smsService,
         ITokenService tokenService,
         IPermissionService permissionService,
+        IUserService userService,
         IConfiguration configuration,
         ILogger<AuthService> logger)
     {
@@ -33,6 +35,7 @@ public class AuthService : IAuthService
         _smsService = smsService;
         _tokenService = tokenService;
         _permissionService = permissionService;
+        _userService = userService;
         _logger = logger;
 
         // Allowed position IDs configuration dan o'qish
@@ -142,6 +145,9 @@ public class AuthService : IAuthService
                 }
             }
 
+            // User'ni local database'ga sync qilish (create yoki update)
+            await SyncUserFromPhpApiAsync(worker);
+
             // JWT token generatsiya qilish
             var token = _tokenService.GenerateToken(worker);
 
@@ -223,6 +229,69 @@ public class AuthService : IAuthService
         {
             _logger.LogError(ex, "Error getting user data from token");
             return AuthResponseDto<UserPermissionsDto>.Failure("Xatolik yuz berdi");
+        }
+    }
+
+    /// <summary>
+    /// PHP API'dan kelgan user ma'lumotlarini local database'ga sync qilish
+    /// Agar user mavjud bo'lsa - update, bo'lmasa - create
+    /// </summary>
+    private async Task SyncUserFromPhpApiAsync(PhpWorkerDto worker)
+    {
+        try
+        {
+            _logger.LogInformation("Syncing user from PHP API: WorkerId={WorkerId}, Phone={Phone}",
+                worker.WorkerId, worker.PhoneNumber);
+
+            // User'ni user_id bo'yicha qidirish (PHP API worker_id)
+            var existingUser = await _userService.GetByUserIdAsync(worker.WorkerId);
+
+            if (existingUser != null)
+            {
+                // User mavjud - ma'lumotlarni yangilash
+                _logger.LogInformation("User exists with user_id={UserId}, updating data", worker.WorkerId);
+
+                existingUser.Name = worker.WorkerName;
+                existingUser.Phone = worker.PhoneNumber;
+                existingUser.WorkerGuid = worker.WorkerGuid;
+                existingUser.BranchGuid = worker.BranchGuid;
+                existingUser.PositionId = worker.PositionId;
+                existingUser.Image = worker.Image; // PHP API'dan kelgan image URL
+                existingUser.IsActive = true;
+
+                await _userService.UpdateAsync(existingUser.Id, existingUser);
+
+                _logger.LogInformation("User updated successfully: UserId={UserId}, Name={Name}",
+                    worker.WorkerId, worker.WorkerName);
+            }
+            else
+            {
+                // User mavjud emas - yangi user yaratish
+                _logger.LogInformation("User not found with user_id={UserId}, creating new user", worker.WorkerId);
+
+                var newUser = new Domain.Entities.User
+                {
+                    UserId = worker.WorkerId,
+                    Name = worker.WorkerName,
+                    Phone = worker.PhoneNumber,
+                    WorkerGuid = worker.WorkerGuid,
+                    BranchGuid = worker.BranchGuid,
+                    PositionId = worker.PositionId,
+                    Image = worker.Image,
+                    IsActive = true
+                };
+
+                await _userService.CreateAsync(newUser);
+
+                _logger.LogInformation("User created successfully: UserId={UserId}, Name={Name}",
+                    worker.WorkerId, worker.WorkerName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing user from PHP API: WorkerId={WorkerId}",
+                worker.WorkerId);
+            // Don't throw - authentication should continue even if user sync fails
         }
     }
 }

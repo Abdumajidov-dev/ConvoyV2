@@ -417,4 +417,51 @@ public class UserService : IUserService
             return false;
         }
     }
+
+    /// <summary>
+    /// PHP API worker_id (user_id) bo'yicha user'ni topish
+    /// </summary>
+    public async Task<User?> GetByUserIdAsync(int userId)
+    {
+        return await _context.Users
+            .FirstOrDefaultAsync(u => u.UserId == userId);
+    }
+
+    /// <summary>
+    /// User entity yaratish (AuthService'dan)
+    /// </summary>
+    public async Task CreateAsync(User user)
+    {
+        await _userRepository.CreateAsync(user);
+        await _userRepository.SaveAsync();
+
+        _logger.LogInformation("User created with user_id={UserId}, Name={Name}",
+            user.UserId, user.Name);
+    }
+
+    /// <summary>
+    /// User entity yangilash (AuthService'dan)
+    /// </summary>
+    public async Task UpdateAsync(long id, User user)
+    {
+        var existingUser = await _userRepository.GetByIdAsync(id);
+        if (existingUser == null)
+        {
+            throw new InvalidOperationException($"User with id {id} not found");
+        }
+
+        // Update fields
+        existingUser.Name = user.Name;
+        existingUser.Phone = user.Phone;
+        existingUser.WorkerGuid = user.WorkerGuid;
+        existingUser.BranchGuid = user.BranchGuid;
+        existingUser.PositionId = user.PositionId;
+        existingUser.Image = user.Image;
+        existingUser.IsActive = user.IsActive;
+
+        await _userRepository.SaveAsync();
+
+        _logger.LogInformation("User updated with user_id={UserId}, Name={Name}",
+            user.UserId, user.Name);
+    }
 }
