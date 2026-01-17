@@ -218,33 +218,31 @@ WHERE r.name = 'Viewer'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- ================================================
--- Verification Queries
+-- Verification Queries (commented out - not needed in migration)
 -- ================================================
 
--- Check created tables
-SELECT table_name
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name IN ('roles', 'permissions', 'user_roles', 'role_permissions')
-ORDER BY table_name;
+-- -- Check created tables
+-- SELECT table_name
+-- FROM information_schema.tables
+-- WHERE table_schema = 'public'
+--   AND table_name IN ('roles', 'permissions', 'user_roles', 'role_permissions')
+-- ORDER BY table_name;
 
--- Count permissions
-SELECT COUNT(*) as total_permissions FROM permissions;
+-- -- Count permissions
+-- SELECT COUNT(*) as total_permissions FROM permissions;
 
--- Count roles
-SELECT COUNT(*) as total_roles FROM roles;
+-- -- Count roles
+-- SELECT COUNT(*) as total_roles FROM roles;
 
--- Count role-permission relationships
-SELECT r.name as role_name, COUNT(rp.id) as permission_count
-FROM roles r
-LEFT JOIN role_permissions rp ON r.id = rp.role_id
-GROUP BY r.id, r.name
-ORDER BY r.name;
+-- -- Count role-permission relationships
+-- SELECT r.name as role_name, COUNT(rp.id) as permission_count
+-- FROM roles r
+-- LEFT JOIN role_permissions rp ON r.id = rp.role_id
+-- GROUP BY r.id, r.name
+-- ORDER BY r.name;
 
--- Show all permissions by resource
-SELECT resource, COUNT(*) as permission_count
-FROM permissions
-GROUP BY resource
-ORDER BY resource;
-
-COMMIT;
+-- -- Show all permissions by resource
+-- SELECT resource, COUNT(*) as permission_count
+-- FROM permissions
+-- GROUP BY resource
+-- ORDER BY resource;
