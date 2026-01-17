@@ -232,7 +232,7 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Convoy API v1");
-    c.RoutePrefix = string.Empty; // Serve Swagger UI at root (/)
+    c.RoutePrefix = "swagger"; // Serve Swagger UI at /swagger (Railway healthcheck compatible)
 });
 
 // Disable HTTPS redirection in production (Railway handles HTTPS)
@@ -261,5 +261,16 @@ app.MapControllers();
 
 // SignalR Hub endpoint
 app.MapHub<Convoy.Api.Hubs.LocationHub>("/hubs/location");
+
+// Health check endpoint for Railway and monitoring
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.EnvironmentName
+})).AllowAnonymous();
+
+// Root endpoint redirects to Swagger
+app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
 
 app.Run();
