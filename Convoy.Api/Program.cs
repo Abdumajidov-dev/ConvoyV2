@@ -24,12 +24,40 @@ Console.WriteLine($"========================================");
 Console.WriteLine($"ENVIRONMENT: {builder.Environment.EnvironmentName}");
 Console.WriteLine($"CONNECTION STRING LENGTH: {connectionString?.Length ?? 0}");
 Console.WriteLine($"CONNECTION STRING (first 50 chars): {(string.IsNullOrEmpty(connectionString) ? "EMPTY OR NULL" : connectionString.Substring(0, Math.Min(50, connectionString.Length)))}...");
-Console.WriteLine($"========================================");
 
 if (string.IsNullOrEmpty(connectionString))
 {
     throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured! Check appsettings.json or environment variables.");
 }
+
+// Convert PostgreSQL URI format to Npgsql connection string if needed
+// Railway provides: postgresql://user:pass@host:port/db
+// Npgsql needs: Host=host;Port=port;Database=db;Username=user;Password=pass
+if (connectionString.StartsWith("postgres://") || connectionString.StartsWith("postgresql://"))
+{
+    try
+    {
+        var uri = new Uri(connectionString);
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 5432;
+        var database = uri.AbsolutePath.TrimStart('/');
+        var userInfo = uri.UserInfo.Split(':');
+        var username = userInfo[0];
+        var password = userInfo.Length > 1 ? userInfo[1] : "";
+
+        connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+        Console.WriteLine($"CONVERTED TO NPGSQL FORMAT");
+        Console.WriteLine($"Host: {host}, Port: {port}, Database: {database}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"ERROR CONVERTING URI: {ex.Message}");
+        throw new InvalidOperationException($"Failed to parse PostgreSQL URI: {ex.Message}", ex);
+    }
+}
+
+Console.WriteLine($"FINAL CONNECTION STRING LENGTH: {connectionString.Length}");
+Console.WriteLine($"========================================");
 
 // EF Core DbContext (User va boshqa EF Core entity'lar uchun)
 builder.Services.AddDbContext<AppDbConText>(options =>
