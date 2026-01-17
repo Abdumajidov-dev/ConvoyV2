@@ -3,6 +3,18 @@
 -- Convoy GPS Tracking - ASP.NET Core Identity + Permission
 -- ================================================
 
+-- Force re-run if this migration was partially applied before
+-- This ensures idempotency even if previous run failed midway
+DO $$
+BEGIN
+    -- If permissions table doesn't exist but migration was marked as applied,
+    -- remove it from migrations table to allow re-run
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'permissions') THEN
+        DELETE FROM __migrations WHERE migration_name = '002_permission_system';
+        RAISE NOTICE 'Removed partial migration 002_permission_system from tracking';
+    END IF;
+END $$;
+
 -- 1. Create roles table
 CREATE TABLE IF NOT EXISTS roles (
     id BIGSERIAL PRIMARY KEY,
