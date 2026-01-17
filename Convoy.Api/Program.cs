@@ -19,6 +19,18 @@ var builder = WebApplication.CreateBuilder(args);
 // PostgreSQL connection string
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
+// DEBUG: Log connection string to verify it's loaded correctly
+Console.WriteLine($"========================================");
+Console.WriteLine($"ENVIRONMENT: {builder.Environment.EnvironmentName}");
+Console.WriteLine($"CONNECTION STRING LENGTH: {connectionString?.Length ?? 0}");
+Console.WriteLine($"CONNECTION STRING (first 50 chars): {(string.IsNullOrEmpty(connectionString) ? "EMPTY OR NULL" : connectionString.Substring(0, Math.Min(50, connectionString.Length)))}...");
+Console.WriteLine($"========================================");
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured! Check appsettings.json or environment variables.");
+}
+
 // EF Core DbContext (User va boshqa EF Core entity'lar uchun)
 builder.Services.AddDbContext<AppDbConText>(options =>
     options.UseNpgsql(connectionString));
