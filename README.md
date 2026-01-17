@@ -10,6 +10,8 @@ Enterprise-grade GPS tracking system with PostgreSQL partitioned tables, built w
 - 🔄 **Auto Partition Creation** - Background service automatically creates partitions
 - 📏 **Distance Calculation** - Haversine formula for accurate GPS distance
 - 📈 **Daily Statistics** - Automatic summary aggregation
+- 🔐 **OTP Authentication** - Secure phone-based authentication with JWT
+- 🔄 **Auto User Sync** - PHP API integration for user management
 - 🐳 **Docker Ready** - One-command deployment
 - 🔐 **Production Ready** - Logging, health checks, error handling
 
