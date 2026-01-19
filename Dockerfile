@@ -1,4 +1,5 @@
 # Convoy GPS Tracking API - Dockerfile
+# Cache bust: 2026-01-19T17:15:00Z - Force rebuild with all controllers
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 # Railway dynamically assigns PORT - don't expose fixed ports
@@ -6,6 +7,11 @@ WORKDIR /app
 
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+# Cache busting argument - changes with every commit
+ARG CACHEBUST=1
+RUN echo "Cache bust: $CACHEBUST"
+
 WORKDIR /src
 
 # Copy csproj files and restore
