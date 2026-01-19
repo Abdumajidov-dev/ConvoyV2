@@ -54,7 +54,9 @@
       "Bash(where railway:*)",
       "Bash(railway status:*)",
       "Bash(cat:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(cmd.exe /c dir /b Convoy.ServiceMigrations)",
+      "Bash(rm:*)"
     ]
   }
 }

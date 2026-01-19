@@ -48,7 +48,4 @@ public class User : Auditable
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
-
-    // Navigation properties for Roles
-    public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }

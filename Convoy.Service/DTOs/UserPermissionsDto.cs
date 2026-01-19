@@ -27,5 +27,5 @@ public class UserPermissionsDto
     public List<long> RoleId { get; set; } = new();
 
     [JsonPropertyName("permissions")]
-    public List<Dictionary<string, List<string>>> Permissions { get; set; } = new();
+    public Dictionary<string, List<string>> Permissions { get; set; } = new();
 }

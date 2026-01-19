@@ -104,16 +104,9 @@ builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
 
-// Permission service
-builder.Services.AddScoped<IPermissionService, PermissionService>();
-
-// Role service
-builder.Services.AddScoped<IRoleService, RoleService>();
-
 // Background services (ordering matters - DatabaseInitializer birinchi)
 builder.Services.AddHostedService<DatabaseInitializerService>();
 builder.Services.AddHostedService<PartitionMaintenanceService>();
-builder.Services.AddHostedService<PermissionSeedService>(); // Permission sistemasi seed
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -182,20 +175,8 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Authorization - Permission-based policies
-builder.Services.AddAuthorization(options =>
-{
-    // Har bir permission uchun policy yaratish
-    var allPermissions = Convoy.Domain.Constants.Permissions.GetAll();
-    foreach (var (name, _, _, _, _) in allPermissions)
-    {
-        options.AddPolicy(name, policy =>
-            policy.Requirements.Add(new Convoy.Api.Authorization.PermissionRequirement(name)));
-    }
-});
-
-// Authorization handler
-builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, Convoy.Api.Authorization.PermissionAuthorizationHandler>();
+// Authorization - Simple JWT-based
+builder.Services.AddAuthorization();
 
 // SignalR
 builder.Services.AddSignalR();

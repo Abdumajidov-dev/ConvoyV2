@@ -12,7 +12,6 @@ public class AuthService : IAuthService
     private readonly IOtpService _otpService;
     private readonly ISmsService _smsService;
     private readonly ITokenService _tokenService;
-    private readonly IPermissionService _permissionService;
     private readonly IUserService _userService;
     private readonly ILogger<AuthService> _logger;
     private readonly int[] _allowedPositionIds;
@@ -25,7 +24,6 @@ public class AuthService : IAuthService
         IOtpService otpService,
         ISmsService smsService,
         ITokenService tokenService,
-        IPermissionService permissionService,
         IUserService userService,
         IConfiguration configuration,
         ILogger<AuthService> logger)
@@ -34,7 +32,6 @@ public class AuthService : IAuthService
         _otpService = otpService;
         _smsService = smsService;
         _tokenService = tokenService;
-        _permissionService = permissionService;
         _userService = userService;
         _logger = logger;
 
@@ -201,27 +198,23 @@ public class AuthService : IAuthService
             var userName = jwtToken.Claims.First(c => c.Type == "unique_name").Value;
             var phoneNumber = jwtToken.Claims.First(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone").Value;
 
-            // User'ning role'larini olish
-            var rolesResult = await _permissionService.GetUserRolesAsync(userId);
-            var roles = rolesResult.Success ? rolesResult.Data : new List<Domain.Entities.Role>();
+            // Image claim'ni olish (agar mavjud bo'lsa)
+            var imageClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "image");
+            var image = imageClaim?.Value;
 
-            // User'ning permission'larini grouped format'da olish
-            var groupedPermissions = await _permissionService.GetUserPermissionsGroupedAsync(userId);
-
-            // Response DTO yaratish
+            // Response DTO yaratish (permissions'siz - PHP API'da boshqariladi)
             var response = new UserPermissionsDto
             {
                 UserId = userId,
                 Name = userName,
                 Phone = phoneNumber,
-                Image = null, // Token ichida image yo'q
-                Role = roles?.FirstOrDefault()?.Name,
-                RoleId = roles?.Select(r => r.Id).ToList() ?? new List<long>(),
-                Permissions = groupedPermissions
+                Image = image,
+                Role = null, // PHP API'da boshqariladi
+                RoleId = new List<long>(), // PHP API'da boshqariladi
+                Permissions = new Dictionary<string, List<string>>() // PHP API'da boshqariladi
             };
 
-            _logger.LogInformation("Successfully retrieved user data with role '{RoleName}', {RoleIdCount} role IDs and {PermissionCount} permission groups for user {UserId}",
-                response.Role ?? "no role", response.RoleId.Count, response.Permissions.Count, userId);
+            _logger.LogInformation("Successfully retrieved user data for user {UserId}", userId);
 
             return AuthResponseDto<UserPermissionsDto>.Success(response, "Foydalanuvchi ma'lumotlari");
         }
