@@ -1,0 +1,4 @@
+# Railway deployment trigger file
+# Changing this file forces Railway to deploy without cache
+# Timestamp: 2026-01-19T17:20:00Z
+DEPLOY_VERSION=2
