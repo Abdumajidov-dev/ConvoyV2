@@ -1,36 +1,37 @@
 # Convoy GPS Tracking API - Dockerfile
-# COMPLETE REBUILD - 2026-01-20T13:00:00Z
-# Railway cache bust: FORCE ALL CONTROLLERS
+# ABSOLUTE NUCLEAR OPTION - ARG-based cache invalidation
+# BUILD_ID changes every commit, forcing complete rebuild
 
 # Base runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 
-# Build stage - COMPLETELY NEW STRUCTURE
+# Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
-# === CRITICAL: FORCE CACHE INVALIDATION - V2 ===
-# Railway MUST see this as completely new layer
-RUN apt-get update && apt-get install -y --no-install-recommends file && rm -rf /var/lib/apt/lists/* && \
+# === ARG-BASED CACHE KILLER (Railway cannot cache this) ===
+ARG BUILD_ID=unknown
+ARG RAILWAY_GIT_COMMIT_SHA=unknown
+RUN echo "════════════════════════════════════════════════" && \
+    echo "🚀 ABSOLUTE FRESH BUILD" && \
     echo "════════════════════════════════════════════════" && \
-    echo "🚀 BUILD: $(date +%s) - RAILWAY CACHE KILLER V2" && \
+    echo "BUILD_ID: ${BUILD_ID}" && \
+    echo "GIT_COMMIT: ${RAILWAY_GIT_COMMIT_SHA}" && \
+    echo "TIMESTAMP: $(date)" && \
+    echo "UNIX_TIME: $(date +%s)" && \
     echo "════════════════════════════════════════════════" && \
-    echo "Controllers that MUST appear in production:" && \
-    echo "  ✅ /api/auth/* (AuthController.cs)" && \
-    echo "  ✅ /api/branches/* (BranchController.cs)" && \
-    echo "  ✅ /api/locations/* (LocationController.cs)" && \
-    echo "  ✅ /api/users/* (UserController.cs)" && \
-    echo "Controllers that MUST NOT appear:" && \
-    echo "  ❌ /api/DailySummary/* (OLD CACHE - DELETED)" && \
-    echo "════════════════════════════════════════════════" && \
-    echo "System info:" && \
-    uname -a && \
-    echo "Build time: $(date)" && \
-    echo "Random UUID: $(cat /proc/sys/kernel/random/uuid || echo 'no-uuid')"
+    echo "Required Controllers:" && \
+    echo "  ✅ AuthController -> /api/auth/*" && \
+    echo "  ✅ BranchController -> /api/branches/*" && \
+    echo "  ✅ LocationController -> /api/locations/*" && \
+    echo "  ✅ UserController -> /api/users/*" && \
+    echo "Obsolete (MUST NOT APPEAR):" && \
+    echo "  ❌ DailySummaryController (DELETED)" && \
+    echo "════════════════════════════════════════════════"
 
 WORKDIR /src
 
-# Copy ALL source files at once (bypass granular cache)
+# Copy ALL source files
 COPY . .
 
 # Verify controllers exist before build
@@ -54,9 +55,20 @@ RUN dotnet build "Convoy.Api.csproj" \
     --verbosity normal \
     --no-restore
 
-# Verify DLL includes all controllers
-RUN echo "Build complete. Checking assembly:" && \
-    ls -lh /app/build/Convoy.Api.dll
+# Verify DLL includes all controllers with strings command
+RUN echo "════════════════════════════════════════════════" && \
+    echo "🔍 VERIFYING COMPILED DLL CONTENTS" && \
+    echo "════════════════════════════════════════════════" && \
+    echo "DLL Size:" && \
+    ls -lh /app/build/Convoy.Api.dll && \
+    echo "" && \
+    echo "Searching for controller classes in DLL..." && \
+    apt-get update && apt-get install -y binutils && rm -rf /var/lib/apt/lists/* && \
+    strings /app/build/Convoy.Api.dll | grep -E "(AuthController|BranchController|LocationController|UserController|DailySummaryController)" | sort -u && \
+    echo "" && \
+    echo "Controller routes in DLL..." && \
+    strings /app/build/Convoy.Api.dll | grep -E "api/(auth|branches|locations|users|DailySummary)" | sort -u && \
+    echo "════════════════════════════════════════════════"
 
 # Publish stage
 FROM build AS publish
