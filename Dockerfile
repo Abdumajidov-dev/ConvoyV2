@@ -9,8 +9,13 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
 # Force cache bust - Railway will rebuild from this line
-RUN echo "🚀 REBUILD TRIGGER: 2026-01-20-12:30 - Include all controllers" && \
-    echo "✅ AuthController, BranchController, LocationController, UserController" && \
+# CRITICAL: This must change on every deploy to invalidate cache
+RUN echo "🚀 REBUILD: 1768908340 - FORCE ALL CONTROLLERS" && \
+    echo "✅ AuthController (/api/auth)" && \
+    echo "✅ BranchController (/api/branches)" && \
+    echo "✅ LocationController (/api/locations)" && \
+    echo "✅ UserController (/api/users)" && \
+    echo "❌ Remove DailySummary (old cache)" && \
     date || true
 
 WORKDIR /src
