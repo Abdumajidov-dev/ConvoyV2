@@ -92,17 +92,44 @@ WORKDIR /app
 # Copy published output
 COPY --from=publish /app/publish .
 
-# Verify final files
-RUN echo "Final stage files:" && \
-    ls -lh /app/
+# Install strings utility for verification
+RUN apt-get update && apt-get install -y binutils && rm -rf /var/lib/apt/lists/*
+
+# CRITICAL: Verify controllers in final DLL
+RUN echo "════════════════════════════════════════════════" && \
+    echo "🔍 FINAL VERIFICATION: Checking Convoy.Api.dll" && \
+    echo "════════════════════════════════════════════════" && \
+    echo "DLL size:" && \
+    ls -lh /app/Convoy.Api.dll && \
+    echo "" && \
+    echo "Searching for controller classes..." && \
+    CONTROLLERS=$(strings /app/Convoy.Api.dll | grep -E "^(AuthController|BranchController|LocationController|UserController|DailySummaryController)$" | sort -u) && \
+    echo "$CONTROLLERS" && \
+    echo "" && \
+    if echo "$CONTROLLERS" | grep -q "DailySummaryController"; then \
+        echo "❌ FATAL: DailySummaryController found! This is OLD CACHE!" && \
+        echo "Railway is using stale image. Deployment MUST FAIL." && \
+        exit 1; \
+    fi && \
+    if ! echo "$CONTROLLERS" | grep -q "AuthController"; then \
+        echo "❌ FATAL: AuthController NOT found!" && \
+        exit 1; \
+    fi && \
+    if ! echo "$CONTROLLERS" | grep -q "BranchController"; then \
+        echo "❌ FATAL: BranchController NOT found!" && \
+        exit 1; \
+    fi && \
+    echo "✅ VERIFICATION PASSED: All required controllers present, no old controllers" && \
+    echo "════════════════════════════════════════════════"
 
 # Environment variables
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV PORT=8080
+ENV DOTNET_VERSION=8.0.0.065f49a
 
 # Health check for Railway
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:$PORT/health || exit 1
 
 # Entry point with verbose logging
-ENTRYPOINT ["sh", "-c", "echo '🚀 Starting Convoy API on port $PORT' && dotnet Convoy.Api.dll --urls http://0.0.0.0:$PORT"]
+ENTRYPOINT ["sh", "-c", "echo '🚀 Starting Convoy API v$DOTNET_VERSION on port $PORT' && dotnet Convoy.Api.dll --urls http://0.0.0.0:$PORT"]
