@@ -1,0 +1,155 @@
+name: Build and Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  RAILWAY_SERVICE_NAME: convoy-api
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Build ID
+        id: build_id
+        run: |
+          BUILD_ID="${GITHUB_SHA:0:8}-$(date +%s)"
+          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "Generated BUILD_ID: $BUILD_ID"
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: convoy-api:${{ steps.build_id.outputs.BUILD_ID }}
+          build-args: |
+            BUILD_ID=${{ steps.build_id.outputs.BUILD_ID }}
+            RAILWAY_GIT_COMMIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify Built Image (Critical Check)
+        run: |
+          echo "════════════════════════════════════════════════"
+          echo "🔍 VERIFYING DOCKER IMAGE CONTENTS"
+          echo "════════════════════════════════════════════════"
+
+          # Run container temporarily to inspect DLL
+          docker run --rm --entrypoint sh convoy-api:${{ steps.build_id.outputs.BUILD_ID }} -c "
+            echo 'DLL Size:' && ls -lh /app/Convoy.Api.dll && \
+            echo '' && \
+            echo 'Searching for controller classes...' && \
+            strings /app/Convoy.Api.dll | grep -E '^(AuthController|BranchController|LocationController|UserController|DailySummaryController)$' | sort -u
+          "
+
+          # Check for DailySummaryController (MUST NOT exist)
+          if docker run --rm --entrypoint sh convoy-api:${{ steps.build_id.outputs.BUILD_ID }} -c "strings /app/Convoy.Api.dll | grep -q 'DailySummaryController'"; then
+            echo "❌ FATAL: DailySummaryController found in built image!"
+            echo "This image is corrupted or using old cache. Failing build."
+            exit 1
+          fi
+
+          # Check for AuthController (MUST exist)
+          if ! docker run --rm --entrypoint sh convoy-api:${{ steps.build_id.outputs.BUILD_ID }} -c "strings /app/Convoy.Api.dll | grep -q 'AuthController'"; then
+            echo "❌ FATAL: AuthController NOT found in built image!"
+            exit 1
+          fi
+
+          # Check for BranchController (MUST exist)
+          if ! docker run --rm --entrypoint sh convoy-api:${{ steps.build_id.outputs.BUILD_ID }} -c "strings /app/Convoy.Api.dll | grep -q 'BranchController'"; then
+            echo "❌ FATAL: BranchController NOT found in built image!"
+            exit 1
+          fi
+
+          echo "✅ IMAGE VERIFICATION PASSED"
+          echo "All required controllers present, no obsolete controllers"
+          echo "════════════════════════════════════════════════"
+
+      - name: Login to Railway Registry
+        run: |
+          echo "Logging into Railway registry..."
+          echo "${{ secrets.RAILWAY_TOKEN }}" | docker login registry.railway.app -u _ --password-stdin
+
+      - name: Tag and Push to Railway
+        run: |
+          # Railway service ID from secrets
+          SERVICE_ID="${{ secrets.RAILWAY_SERVICE_ID }}"
+
+          # Tag for Railway registry
+          docker tag convoy-api:${{ steps.build_id.outputs.BUILD_ID }} \
+            registry.railway.app/$SERVICE_ID:latest
+
+          docker tag convoy-api:${{ steps.build_id.outputs.BUILD_ID }} \
+            registry.railway.app/$SERVICE_ID:${{ steps.build_id.outputs.BUILD_ID }}
+
+          # Push both tags
+          docker push registry.railway.app/$SERVICE_ID:latest
+          docker push registry.railway.app/$SERVICE_ID:${{ steps.build_id.outputs.BUILD_ID }}
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }}
+
+      - name: Wait for Deployment
+        run: |
+          echo "Waiting 30 seconds for Railway deployment to stabilize..."
+          sleep 30
+
+      - name: Verify Production Deployment
+        run: |
+          echo "════════════════════════════════════════════════"
+          echo "🔍 VERIFYING PRODUCTION DEPLOYMENT"
+          echo "════════════════════════════════════════════════"
+
+          # Get Swagger JSON from production
+          SWAGGER_URL="${{ secrets.RAILWAY_DEPLOYMENT_URL }}/swagger/v1/swagger.json"
+          echo "Fetching: $SWAGGER_URL"
+
+          SWAGGER_JSON=$(curl -s "$SWAGGER_URL")
+
+          echo "Controllers found in production Swagger:"
+          echo "$SWAGGER_JSON" | jq -r '.paths | keys[]' | sed 's|/api/||' | cut -d'/' -f1 | sort -u
+
+          # Check for DailySummaryController (MUST NOT exist)
+          if echo "$SWAGGER_JSON" | grep -q "DailySummary"; then
+            echo "❌ FATAL: DailySummaryController still appears in production!"
+            echo "Railway may still be serving cached image."
+            exit 1
+          fi
+
+          # Check for AuthController (MUST exist)
+          if ! echo "$SWAGGER_JSON" | grep -q "/api/auth"; then
+            echo "❌ WARNING: AuthController not found in production Swagger!"
+          else
+            echo "✅ AuthController found"
+          fi
+
+          # Check for BranchController (MUST exist)
+          if ! echo "$SWAGGER_JSON" | grep -q "/api/branches"; then
+            echo "❌ WARNING: BranchController not found in production Swagger!"
+          else
+            echo "✅ BranchController found"
+          fi
+
+          echo "════════════════════════════════════════════════"
+          echo "Deployment complete. Check Railway logs if issues persist."
