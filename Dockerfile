@@ -9,19 +9,24 @@ WORKDIR /app
 # Build stage - COMPLETELY NEW STRUCTURE
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
-# === CRITICAL: FORCE CACHE INVALIDATION ===
-# This must be UNIQUE on every deploy to bust Railway cache
-RUN echo "════════════════════════════════════════════════" && \
-    echo "🚀 CONVOY API BUILD: 1768908340-COMPLETE-REBUILD" && \
+# === CRITICAL: FORCE CACHE INVALIDATION - V2 ===
+# Railway MUST see this as completely new layer
+RUN apt-get update && apt-get install -y --no-install-recommends file && rm -rf /var/lib/apt/lists/* && \
     echo "════════════════════════════════════════════════" && \
-    echo "Expected Controllers:" && \
-    echo "  ✅ AuthController (/api/auth)" && \
-    echo "  ✅ BranchController (/api/branches)" && \
-    echo "  ✅ LocationController (/api/locations)" && \
-    echo "  ✅ UserController (/api/users)" && \
-    echo "  ❌ DailySummary (MUST BE REMOVED - old cache)" && \
+    echo "🚀 BUILD: $(date +%s) - RAILWAY CACHE KILLER V2" && \
     echo "════════════════════════════════════════════════" && \
-    date && uname -a
+    echo "Controllers that MUST appear in production:" && \
+    echo "  ✅ /api/auth/* (AuthController.cs)" && \
+    echo "  ✅ /api/branches/* (BranchController.cs)" && \
+    echo "  ✅ /api/locations/* (LocationController.cs)" && \
+    echo "  ✅ /api/users/* (UserController.cs)" && \
+    echo "Controllers that MUST NOT appear:" && \
+    echo "  ❌ /api/DailySummary/* (OLD CACHE - DELETED)" && \
+    echo "════════════════════════════════════════════════" && \
+    echo "System info:" && \
+    uname -a && \
+    echo "Build time: $(date)" && \
+    echo "Random UUID: $(cat /proc/sys/kernel/random/uuid || echo 'no-uuid')"
 
 WORKDIR /src
 
