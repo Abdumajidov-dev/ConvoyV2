@@ -1,5 +1,5 @@
 # Convoy GPS Tracking API - Dockerfile
-# Cache bust: 2026-01-19T17:15:00Z - Force rebuild with all controllers
+# Cache bust: 2026-01-20T12:30:00Z - Force rebuild with AuthController and BranchController
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 # Railway dynamically assigns PORT - don't expose fixed ports
@@ -8,9 +8,10 @@ WORKDIR /app
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
-# Cache busting argument - changes with every commit
-ARG CACHEBUST=1
-RUN echo "Cache bust: $CACHEBUST"
+# Force cache bust - Railway will rebuild from this line
+RUN echo "🚀 REBUILD TRIGGER: 2026-01-20-12:30 - Include all controllers" && \
+    echo "✅ AuthController, BranchController, LocationController, UserController" && \
+    date || true
 
 WORKDIR /src
 
