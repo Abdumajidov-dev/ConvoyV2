@@ -81,7 +81,8 @@ public class PhpApiService : IPhpApiService
     {
         try
         {
-            var _baseUrl = "http://10.100.104.120:8008/api/";
+            var _baseUrl = "https://garant-hr.uz/api/";
+            //var _baseUrl = "http://10.100.104.120:8008/api/";
             var endpoint = $"{_baseUrl.TrimEnd('/')}/branch-list";
 
             // Basic Authentication
