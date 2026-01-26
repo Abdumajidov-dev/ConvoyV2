@@ -3,16 +3,29 @@
 namespace Convoy.Service.Interfaces;
 
 /// <summary>
-/// PHP API bilan ishlash uchun interfeys
+/// PHP API bilan ishlash uchun interfeys - barcha auth requestlarni PHP'ga proxy qiladi
 /// </summary>
 public interface IPhpApiService
 {
     /// <summary>
-    /// Telefon raqam orqali userni PHP API dan tekshiradi
+    /// Telefon raqamni PHP API orqali verify qiladi (proxy to PHP /auth/verify/phone)
     /// </summary>
-    /// <param name="phoneNumber">Telefon raqam</param>
-    /// <returns>PHP Worker ma'lumotlari yoki null</returns>
-    Task<PhpWorkerDto?> VerifyUserAsync(string phoneNumber);
+    Task<PhpApiResponse<PhpWorkerDto>> VerifyNumberAsync(string phoneNumber);
+
+    /// <summary>
+    /// OTP kod yuborishni PHP API orqali amalga oshiradi (proxy to PHP /auth/send-otp)
+    /// </summary>
+    Task<PhpApiResponse<object>> SendOtpAsync(string phoneNumber);
+
+    /// <summary>
+    /// OTP kodni PHP API orqali verify qiladi va JWT token oladi (proxy to PHP /auth/verify-otp)
+    /// </summary>
+    Task<PhpApiResponse<PhpAuthTokenDto>> VerifyOtpAsync(string phoneNumber, string otpCode);
+
+    /// <summary>
+    /// JWT token orqali user ma'lumotlarini PHP API'dan oladi (proxy to PHP /auth/me)
+    /// </summary>
+    Task<PhpApiResponse<PhpUserDto>> GetMeAsync(string token);
 
     /// <summary>
     /// PHP API dan filiallar ro'yxatini oladi (search bilan yoki search'siz)

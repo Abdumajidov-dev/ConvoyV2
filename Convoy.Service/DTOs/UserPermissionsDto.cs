@@ -4,7 +4,8 @@ namespace Convoy.Service.DTOs;
 
 /// <summary>
 /// /api/auth/me endpoint uchun response DTO
-/// Flutter uchun qulay formatda permissions grouped by resource
+/// PHP API'dan kelgan user ma'lumotlari
+/// Permissions PHP API'da boshqariladi (biz faqat proxy qilamiz)
 /// </summary>
 public class UserPermissionsDto
 {
@@ -13,6 +14,9 @@ public class UserPermissionsDto
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
 
     [JsonPropertyName("image")]
     public string? Image { get; set; }

@@ -13,13 +13,11 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
-    private readonly ITokenService _tokenService;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger, ITokenService tokenService)
+    public AuthController(IAuthService authService, ILogger<AuthController> logger)
     {
         _authService = authService;
         _logger = logger;
-        _tokenService = tokenService;
     }
 
     /// <summary>
@@ -205,30 +203,10 @@ public class AuthController : ControllerBase
 
             var token = authHeader.Substring("Bearer ".Length).Trim();
 
-            // User ID olish
-            var userId = _tokenService.GetUserIdFromClaims(User);
-            if (userId == null)
-            {
-                return Unauthorized(new
-                {
-                    status = false,
-                    message = "Invalid token",
-                    data = (object?)null
-                });
-            }
+
 
             // Tokenni blacklist'ga qo'shish
-            var success = await _tokenService.BlacklistTokenAsync(token, userId.Value, "logout");
 
-            if (!success)
-            {
-                return StatusCode(500, new
-                {
-                    status = false,
-                    message = "Logout qilishda xatolik yuz berdi",
-                    data = (object?)null
-                });
-            }
 
             return Ok(new
             {
@@ -253,7 +231,7 @@ public class AuthController : ControllerBase
 // Request DTOs
 public class VerifyNumberRequest
 {
-    [JsonProperty("phone_number")]
+    [JsonProperty("phone")]
     public string PhoneNumber { get; set; } = string.Empty;
 }
 
