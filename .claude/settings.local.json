@@ -4,7 +4,18 @@
       "Bash(cmd.exe /c \"echo -- Drop existing FK > fix_fk_constraint.py && echo ALTER TABLE locations DROP CONSTRAINT IF EXISTS locations_user_id_fkey; >> fix_fk_constraint.py && echo -- Create new FK to users.user_id instead of users.id >> fix_fk_constraint.py && echo ALTER TABLE locations ADD CONSTRAINT locations_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE; >> fix_fk_constraint.py\")",
       "Bash(cmd.exe /c \"findstr /i \"\"connectionstring\"\" Convoy.Api\\appsettings.Development.json 2>nul || findstr /i \"\"connectionstring\"\" Convoy.Api\\appsettings.json\")",
       "Bash(timeout /t 3 /nobreak)",
-      "Bash(cmd.exe /c \"timeout /t 5 /nobreak\")"
+      "Bash(cmd.exe /c \"timeout /t 5 /nobreak\")",
+      "Bash(cmd.exe /c \"findstr /i \"role permission user\" database-setup.sql | findstr /i \"CREATE TABLE\"\")",
+      "Bash(dir /s /b Convoy.DomainEnums 2)",
+      "Bash(nul)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd.exe /c \"dir /s /b Convoy.Domain\\*.cs 2>nul | findstr /i permission\")",
+      "Bash(cmd.exe /c \"dir /s /b Convoy.Service\\*.cs 2>nul | findstr /i permission\")",
+      "Bash(cmd.exe /c \"findstr /i \"\"CREATE TABLE\"\" database-setup.sql\")",
+      "Bash(psql:*)",
+      "Bash(cmd.exe /c \"where psql\")",
+      "Bash(dotnet build:*)"
     ],
     "deny": [],
     "ask": []

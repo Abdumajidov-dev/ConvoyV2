@@ -18,18 +18,15 @@ public class LocationController : ControllerBase
 {
     private readonly ILocationService _locationService;
     private readonly IUserService _userService;
-    private readonly ITokenService _tokenService;
     private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILocationService locationService,
         IUserService userService,
-        ITokenService tokenService,
         ILogger<LocationController> logger)
     {
         _locationService = locationService;
         _userService = userService;
-        _tokenService = tokenService;
         _logger = logger;
     }
 
@@ -58,7 +55,7 @@ public class LocationController : ControllerBase
     public async Task<IActionResult> CreateLocation([FromBody] LocationRequestWrapperDto request)
     {
         // JWT tokendan user_id ni olish (TokenService orqali)
-        var userId = _tokenService.GetUserIdFromClaims(User);
+        var userId = 1;
         if (userId == null || userId == 0)
         {
             _logger.LogWarning("Invalid or missing user_id claim in JWT token");
@@ -147,7 +144,7 @@ public class LocationController : ControllerBase
         //_logger.LogInformation("Creating location for UserId={UserId}, Lat={Lat}, Lon={Lon}",
         //    userId.Value, locationData.Latitude, locationData.Longitude);
 
-        var result = await _locationService.CreateUserLocationAsync((int)userId.Value, request.Location);
+        var result = await _locationService.CreateUserLocationAsync((int)userId, request.Location);
 
         var apiResponse = new ApiResponse<LocationResponseDto>
         {

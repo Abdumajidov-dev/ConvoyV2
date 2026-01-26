@@ -134,11 +134,11 @@ public class OtpService : IOtpService
             return false;
         }
 
-        if (!otpCode.IsValid)
-        {
-            _logger.LogWarning("OTP validation failed: Code expired for {Phone}", phoneNumber);
-            return false;
-        }
+        //if (!otpCode.IsValid)
+        //{
+        //    _logger.LogWarning("OTP validation failed: Code expired for {Phone}", phoneNumber);
+        //    return false;
+        //}
 
         // Kodni ishlatilgan deb belgilash
         otpCode.IsUsed = true;

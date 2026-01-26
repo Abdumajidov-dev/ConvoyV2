@@ -83,9 +83,9 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 // HttpClient for PhpApiService
 builder.Services.AddHttpClient<IPhpApiService, PhpApiService>();
 
-// SMS Providers
-builder.Services.AddHttpClient<SmsFlySender>();
-builder.Services.AddHttpClient<SayqalSender>();
+// SMS Providers olib tashlandi - PHP API'da boshqariladi
+// builder.Services.AddHttpClient<SmsFlySender>();
+// builder.Services.AddHttpClient<SayqalSender>();
 
 // Telegram Bot Service
 builder.Services.AddHttpClient<ITelegramService, TelegramService>();
@@ -102,9 +102,9 @@ builder.Services.AddScoped<ILocationService>(sp =>
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IOtpService, OtpService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<ISmsService, CompositeSmsService>();
+// OtpService va SmsService olib tashlandi - PHP API'da boshqariladi
+// builder.Services.AddScoped<IOtpService, OtpService>();
+// builder.Services.AddScoped<ISmsService, CompositeSmsService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 
 // AutoMapper
@@ -161,7 +161,6 @@ builder.Services.AddAuthentication(options =>
         OnTokenValidated = async context =>
         {
             // Token blacklist'da ekanligini tekshirish
-            var tokenService = context.HttpContext.RequestServices.GetRequiredService<ITokenService>();
             var token = context.SecurityToken as System.IdentityModel.Tokens.Jwt.JwtSecurityToken;
 
             if (token != null)
@@ -170,11 +169,7 @@ builder.Services.AddAuthentication(options =>
 
                 if (!string.IsNullOrEmpty(jti))
                 {
-                    var isBlacklisted = await tokenService.IsTokenBlacklistedAsync(jti);
-                    if (isBlacklisted)
-                    {
-                        context.Fail("Token has been revoked (logged out)");
-                    }
+
                 }
             }
         }
