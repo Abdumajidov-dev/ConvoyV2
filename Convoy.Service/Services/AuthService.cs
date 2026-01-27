@@ -13,15 +13,18 @@ public class AuthService : IAuthService
 {
     private readonly IPhpApiService _phpApiService;
     private readonly IUserService _userService;
+    private readonly IPhpTokenService _phpTokenService;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IPhpApiService phpApiService,
         IUserService userService,
+        IPhpTokenService phpTokenService,
         ILogger<AuthService> logger)
     {
         _phpApiService = phpApiService;
         _userService = userService;
+        _phpTokenService = phpTokenService;
         _logger = logger;
     }
 
@@ -97,7 +100,7 @@ public class AuthService : IAuthService
 
     /// <summary>
     /// OTP kodni verify qilish va JWT token olish - PHP API'ga proxy
-    /// PHP API JWT token qaytaradi, uni biz client'ga o'tkazamiz
+    /// Token'ni decode qilib user ma'lumotlarini local DB'ga sync qiladi
     /// </summary>
     public async Task<AuthResponseDto<VerifyOtpResponseDto>> VerifyOtpAsync(string phoneNumber, string otpCode)
     {
@@ -117,10 +120,26 @@ public class AuthService : IAuthService
                 );
             }
 
+            var token = phpResponse.Result.Token;
+
+            // Token'ni decode qilib user ma'lumotlarini olish
+            _logger.LogInformation("Decoding JWT token to extract user data");
+            var phpUser = _phpTokenService.DecodeToken(token);
+
+            if (phpUser != null && phpUser.WorkerId > 0)
+            {
+                _logger.LogInformation("Token decoded successfully, syncing user worker_id={WorkerId}", phpUser.WorkerId);
+                await SyncUserFromTokenAsync(phpUser);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to decode token or worker_id is invalid");
+            }
+
             // PHP API'dan kelgan tokenni qaytaramiz
             var response = new VerifyOtpResponseDto
             {
-                Token = phpResponse.Result.Token,
+                Token = token,
             };
 
             _logger.LogInformation("PHP API verify_otp success for phone {Phone}", phoneNumber);
@@ -138,121 +157,129 @@ public class AuthService : IAuthService
     }
 
     /// <summary>
-    /// User ma'lumotlarini olish - PHP API'ga proxy va local DB'ga sync
-    /// PHP API'dan user ma'lumotlarini oladi va local database'ga saqlab/yangilab qo'yadi
+    /// User ma'lumotlarini olish - Token'ni decode qilib local DB'dan oladi
+    /// PHP API'ga murojaat qilmasdan token ichidagi ma'lumotlardan foydalanadi
     /// </summary>
     public async Task<AuthResponseDto<UserPermissionsDto>> GetMeAsync(string token)
     {
         try
         {
-            _logger.LogInformation("Proxying get_me request to PHP API");
+            _logger.LogInformation("Decoding JWT token to get user data");
 
-            // PHP API'dan user ma'lumotlarini olish
-            var phpResponse = await _phpApiService.GetMeAsync(token);
+            // Token'ni decode qilish
+            var phpUser = _phpTokenService.DecodeToken(token);
 
-            if (!phpResponse.Status || phpResponse.Result == null)
+            if (phpUser == null || phpUser.WorkerId <= 0)
             {
-                var errorMessage = phpResponse.GetMessage();
-                _logger.LogWarning("PHP API get_me failed: {Message}", errorMessage);
-                return AuthResponseDto<UserPermissionsDto>.Failure(
-                    string.IsNullOrEmpty(errorMessage) ? "Foydalanuvchi topilmadi" : errorMessage
-                );
+                _logger.LogWarning("Failed to decode token or invalid worker_id");
+                return AuthResponseDto<UserPermissionsDto>.Failure("Token noto'g'ri yoki muddati tugagan");
             }
 
-            var phpUser = phpResponse.Result;
+            // Token muddatini tekshirish
+            if (!_phpTokenService.IsTokenValid(token))
+            {
+                _logger.LogWarning("Token expired for worker_id={WorkerId}", phpUser.WorkerId);
+                return AuthResponseDto<UserPermissionsDto>.Failure("Token muddati tugagan");
+            }
 
             // User'ni local database'ga sync qilish (create yoki update)
-            await SyncUserFromPhpApiAsync(phpUser);
+            await SyncUserFromTokenAsync(phpUser);
 
-            // Response DTO yaratish
+            // Response DTO yaratish (token'dan olingan ma'lumotlar)
             var response = new UserPermissionsDto
             {
-                UserId = phpUser.Id,
+                UserId = phpUser.WorkerId,
+                BranchGuid = phpUser.BranchGuid ?? "",
                 Name = phpUser.Name,
                 Phone = phpUser.Phone,
                 Username = phpUser.Username,
-                Image = phpUser.Image,
+                Image = phpUser.Photo,
                 Role = phpUser.Role,
                 RoleId = new List<long>(), // PHP API'da boshqariladi
                 Permissions = new Dictionary<string, List<string>>() // PHP API'da boshqariladi
             };
 
-            _logger.LogInformation("Successfully retrieved and synced user data for user {UserId}", phpUser.Id);
+            _logger.LogInformation("Successfully decoded token and synced user worker_id={WorkerId}", phpUser.WorkerId);
 
-            var successMessage = phpResponse.GetMessage();
             return AuthResponseDto<UserPermissionsDto>.Success(
                 response,
-                string.IsNullOrEmpty(successMessage) ? "Foydalanuvchi ma'lumotlari" : successMessage
+                "Foydalanuvchi ma'lumotlari"
             );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error proxying get_me to PHP API");
+            _logger.LogError(ex, "Error getting user from token");
             return AuthResponseDto<UserPermissionsDto>.Failure("Xatolik yuz berdi");
         }
     }
 
     /// <summary>
-    /// PHP API'dan kelgan user ma'lumotlarini local database'ga sync qilish
-    /// Agar user mavjud bo'lsa - update, bo'lmasa - create
+    /// Token'dan olingan user ma'lumotlarini local database'ga sync qilish
+    /// worker_id bo'yicha user'ni qidiradi (agar user mavjud bo'lsa - update, bo'lmasa - create)
     /// </summary>
-    private async Task SyncUserFromPhpApiAsync(PhpUserDto phpUser)
+    private async Task SyncUserFromTokenAsync(PhpUserDto phpUser)
     {
         try
         {
-            _logger.LogInformation("Syncing user from PHP API: UserId={UserId}, Phone={Phone}",
-                phpUser.Id, phpUser.Phone);
+            _logger.LogInformation("Syncing user from token: WorkerId={WorkerId}, Name={Name}",
+                phpUser.WorkerId, phpUser.Name);
 
-            // User'ni user_id bo'yicha qidirish (PHP API user ID)
-            var existingUser = await _userService.GetByUserIdAsync(phpUser.Id);
+            // User'ni worker_id bo'yicha qidirish
+            var existingUser = await _userService.GetByUserIdAsync(phpUser.WorkerId);
 
             if (existingUser != null)
             {
                 // User mavjud - ma'lumotlarni yangilash
-                _logger.LogInformation("User exists with user_id={UserId}, updating data", phpUser.Id);
+                _logger.LogInformation("User exists with worker_id={WorkerId}, updating data", phpUser.WorkerId);
 
                 existingUser.Name = phpUser.Name;
                 existingUser.Username = phpUser.Username;
                 existingUser.Phone = phpUser.Phone;
                 existingUser.WorkerGuid = phpUser.WorkerGuid;
-                existingUser.BranchGuid = phpUser.BranchGuid;
+                existingUser.BranchGuid = phpUser.FilialGuid;
+                existingUser.BranchName = phpUser.FilialName;
                 existingUser.PositionId = phpUser.PositionId;
-                existingUser.Image = phpUser.Image;
-                existingUser.IsActive = phpUser.IsActive == 1;
+                existingUser.Image = phpUser.Photo;
+                existingUser.UserType = phpUser.Type;
+                existingUser.Role = phpUser.Role;
+                existingUser.IsActive = true; // Token active bo'lsa user ham active
 
                 await _userService.UpdateAsync(existingUser.Id, existingUser);
 
-                _logger.LogInformation("User updated successfully: UserId={UserId}, Name={Name}",
-                    phpUser.Id, phpUser.Name);
+                _logger.LogInformation("User updated successfully: WorkerId={WorkerId}, Name={Name}",
+                    phpUser.WorkerId, phpUser.Name);
             }
             else
             {
                 // User mavjud emas - yangi user yaratish
-                _logger.LogInformation("User not found with user_id={UserId}, creating new user", phpUser.Id);
+                _logger.LogInformation("User not found with worker_id={WorkerId}, creating new user", phpUser.WorkerId);
 
                 var newUser = new Domain.Entities.User
                 {
-                    UserId = phpUser.Id,
+                    UserId = phpUser.WorkerId, // worker_id ni user_id sifatida saqlash
                     Name = phpUser.Name,
                     Username = phpUser.Username,
                     Phone = phpUser.Phone,
                     WorkerGuid = phpUser.WorkerGuid,
-                    BranchGuid = phpUser.BranchGuid,
+                    BranchGuid = phpUser.FilialGuid,
+                    BranchName = phpUser.FilialName,
                     PositionId = phpUser.PositionId,
-                    Image = phpUser.Image,
-                    IsActive = phpUser.IsActive == 1
+                    Image = phpUser.Photo,
+                    UserType = phpUser.Type,
+                    Role = phpUser.Role,
+                    IsActive = true
                 };
 
                 await _userService.CreateAsync(newUser);
 
-                _logger.LogInformation("User created successfully: UserId={UserId}, Name={Name}",
-                    phpUser.Id, phpUser.Name);
+                _logger.LogInformation("User created successfully: WorkerId={WorkerId}, Name={Name}",
+                    phpUser.WorkerId, phpUser.Name);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error syncing user from PHP API: UserId={UserId}",
-                phpUser.Id);
+            _logger.LogError(ex, "Error syncing user from token: WorkerId={WorkerId}",
+                phpUser.WorkerId);
             // Don't throw - authentication should continue even if user sync fails
         }
     }

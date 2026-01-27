@@ -6,6 +6,7 @@ using Convoy.Service.Interfaces;
 using Convoy.Service.Services;
 using Convoy.Service.Services.SmsProviders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -102,6 +103,7 @@ builder.Services.AddScoped<ILocationService>(sp =>
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPhpTokenService, PhpTokenService>(); // JWT token decode service
 // OtpService va SmsService olib tashlandi - PHP API'da boshqariladi
 // builder.Services.AddScoped<IOtpService, OtpService>();
 // builder.Services.AddScoped<ISmsService, CompositeSmsService>();
@@ -114,70 +116,20 @@ builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
 builder.Services.AddHostedService<DatabaseInitializerService>();
 builder.Services.AddHostedService<PartitionMaintenanceService>();
 
-// JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("Jwt");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+// PHP Token Authorization (JWT authentication o'chirilgan - PHP token ishlatiladi)
+// Custom authorization handler orqali PHP token'larni validate qilamiz
+builder.Services.AddAuthentication("PhpTokenScheme")
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Convoy.Api.Authorization.PhpTokenAuthenticationHandler>("PhpTokenScheme", options => { });
 
-builder.Services.AddAuthentication(options =>
+// Authorization with custom policy
+builder.Services.AddAuthorization(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = false, // Token expiration check o'chirilgan - token abadiy amal qiladi
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
-    };
-
-    // Custom token extraction - "token" headeridan yoki "Authorization" headeridan
-    options.Events = new JwtBearerEvents
-    {
-        OnMessageReceived = context =>
-        {
-            //// Birinchi "token" headerini tekshirish
-            //if (context.Request.Headers.TryGetValue("token", out var tokenValue))
-            //{
-            //    context.Token = tokenValue;
-            //}
-            // Agar "token" header bo'lmasa, standart "Authorization: Bearer" ni ishlatish
-             if (context.Request.Headers.ContainsKey("Authorization"))
-            {
-                var authHeader = context.Request.Headers["Authorization"].ToString();
-                if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                {
-                    context.Token = authHeader.Substring("Bearer ".Length).Trim();
-                }
-            }
-
-            return Task.CompletedTask;
-        },
-        OnTokenValidated = async context =>
-        {
-            // Token blacklist'da ekanligini tekshirish
-            var token = context.SecurityToken as System.IdentityModel.Tokens.Jwt.JwtSecurityToken;
-
-            if (token != null)
-            {
-                var jti = token.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-
-                if (!string.IsNullOrEmpty(jti))
-                {
-
-                }
-            }
-        }
-    };
+    // Default policy - barcha [Authorize] attribute'lar uchun
+    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .AddAuthenticationSchemes("PhpTokenScheme")
+        .RequireAuthenticatedUser()
+        .Build();
 });
-
-// Authorization - Simple JWT-based
-builder.Services.AddAuthorization();
 
 // SignalR
 builder.Services.AddSignalR();

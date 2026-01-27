@@ -31,6 +31,22 @@ public class LocationController : ControllerBase
     }
 
     /// <summary>
+    /// Token'dan worker_id (user_id) ni olish helper method
+    /// PhpTokenAuthenticationHandler tomonidan ClaimTypes.NameIdentifier'ga qo'shilgan
+    /// </summary>
+    private int? GetWorkerIdFromToken()
+    {
+        var workerIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(workerIdClaim) || !int.TryParse(workerIdClaim, out var workerId))
+        {
+            return null;
+        }
+
+        return workerId;
+    }
+
+    /// <summary>
     /// Location yaratish (wrapped format, user_id JWT tokendan olinadi)
     /// POST /api/locations
     ///
@@ -54,18 +70,21 @@ public class LocationController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> CreateLocation([FromBody] LocationRequestWrapperDto request)
     {
-        // JWT tokendan user_id ni olish (TokenService orqali)
-        var userId = 1;
-        if (userId == null || userId == 0)
+        // PHP tokendan worker_id ni olish
+        var userId = GetWorkerIdFromToken();
+
+        if (userId == null)
         {
-            _logger.LogWarning("Invalid or missing user_id claim in JWT token");
+            _logger.LogWarning("Invalid or missing worker_id claim in token");
             return Unauthorized(new ApiResponse<object>
             {
                 Status = false,
-                Message = "Noto'g'ri yoki mavjud bo'lmagan user_id token'da",
+                Message = "Token'da worker_id topilmadi yoki noto'g'ri",
                 Data = null
             });
         }
+
+        _logger.LogInformation("Creating location for worker_id={WorkerId}", userId);
 
         // Validate request
         if (request?.Location == null)
@@ -144,7 +163,7 @@ public class LocationController : ControllerBase
         //_logger.LogInformation("Creating location for UserId={UserId}, Lat={Lat}, Lon={Lon}",
         //    userId.Value, locationData.Latitude, locationData.Longitude);
 
-        var result = await _locationService.CreateUserLocationAsync((int)userId, request.Location);
+        var result = await _locationService.CreateUserLocationAsync(userId.Value, request.Location);
 
         var apiResponse = new ApiResponse<LocationResponseDto>
         {

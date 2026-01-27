@@ -130,10 +130,10 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Joriy foydalanuvchi ma'lumotlarini olish (JWT token orqali)
+    /// Token'ni PHP API'ga forward qilib validate qiladi va user ma'lumotlarini qaytaradi
     /// Returns: user info + roles + grouped permissions (Flutter-friendly format)
     /// </summary>
     [HttpGet("me")]
-    [Authorize]
     public async Task<IActionResult> GetMe()
     {
         try
@@ -145,13 +145,14 @@ public class AuthController : ControllerBase
                 return Unauthorized(new
                 {
                     status = false,
-                    message = "Authorization header not found",
+                    message = "Authorization header topilmadi",
                     data = (object?)null
                 });
             }
 
             var token = authHeader.Substring("Bearer ".Length).Trim();
 
+            // Token'ni PHP API'ga forward qilib user ma'lumotlarini olish
             var result = await _authService.GetMeAsync(token);
 
             var response = new
@@ -163,7 +164,8 @@ public class AuthController : ControllerBase
 
             if (!result.Status)
             {
-                return BadRequest(response);
+                // PHP API 401 qaytarsa biz ham 401 qaytaramiz
+                return Unauthorized(response);
             }
 
             return Ok(response);
