@@ -33,7 +33,7 @@ public class PhpWorkerDto
 }
 
 /// <summary>
-/// PHP API /auth/verify-otp response DTO (JWT token bilan)
+/// PHP API /auth/verify-otp response DTO (JWT token + user data bilan)
 /// </summary>
 public class PhpAuthTokenDto
 {
@@ -45,15 +45,36 @@ public class PhpAuthTokenDto
 
     [JsonPropertyName("id")]
     public int Id { get; set; }
+
+    /// <summary>
+    /// PHP API'dan kelgan user ma'lumotlari (optional)
+    /// Agar verify_otp dan user data qaytarsa, buni sync qilamiz
+    /// </summary>
+    [JsonPropertyName("user")]
+    public PhpUserDto? User { get; set; }
 }
 
 /// <summary>
-/// PHP API /auth/me response DTO (to'liq user ma'lumotlari)
+/// PHP API /auth/me response DTO va JWT token payload DTO
+/// Token ichidagi ma'lumotlar bilan to'liq mos keladi
 /// </summary>
 public class PhpUserDto
 {
-    [JsonPropertyName("id")]
-    public int Id { get; set; }
+    /// <summary>
+    /// PHP API user ID (auth table'dagi ID)
+    /// </summary>
+    [JsonPropertyName("user_id")]
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// Worker ID (workers table'dagi ID) - BU ASOSIY ID!
+    /// Local DB'da user_id sifatida saqlanadi
+    /// </summary>
+    [JsonPropertyName("worker_id")]
+    public int WorkerId { get; set; }
+
+    [JsonPropertyName("worker_guid")]
+    public string? WorkerGuid { get; set; }
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
@@ -61,26 +82,54 @@ public class PhpUserDto
     [JsonPropertyName("phone")]
     public string Phone { get; set; } = string.Empty;
 
-    [JsonPropertyName("username")]
-    public string? Username { get; set; }
+    [JsonPropertyName("filial_guid")]
+    public string? FilialGuid { get; set; }
 
-    [JsonPropertyName("is_active")]
-    public int IsActive { get; set; }
+    [JsonPropertyName("filial_name")]
+    public string? FilialName { get; set; }
+
+    [JsonPropertyName("photo")]
+    public string? Photo { get; set; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
 
     [JsonPropertyName("role")]
     public string? Role { get; set; }
 
-    [JsonPropertyName("image")]
-    public string? Image { get; set; }
-
-    [JsonPropertyName("branch_guid")]
-    public string? BranchGuid { get; set; }
-
-    [JsonPropertyName("worker_guid")]
-    public string? WorkerGuid { get; set; }
+    [JsonPropertyName("login_date")]
+    public string? LoginDate { get; set; }
 
     [JsonPropertyName("position_id")]
     public int? PositionId { get; set; }
+
+    // Backward compatibility (eski API endpoint'lar uchun)
+    [JsonPropertyName("id")]
+    public int Id
+    {
+        get => WorkerId;
+        set => WorkerId = value;
+    }
+
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
+
+    [JsonPropertyName("is_active")]
+    public int IsActive { get; set; } = 1;
+
+    [JsonPropertyName("image")]
+    public string? Image
+    {
+        get => Photo;
+        set => Photo = value;
+    }
+
+    [JsonPropertyName("branch_guid")]
+    public string? BranchGuid
+    {
+        get => FilialGuid;
+        set => FilialGuid = value;
+    }
 
     [JsonPropertyName("created_at")]
     public string? CreatedAt { get; set; }

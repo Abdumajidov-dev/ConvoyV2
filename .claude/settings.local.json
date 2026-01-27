@@ -15,7 +15,22 @@
       "Bash(cmd.exe /c \"findstr /i \"\"CREATE TABLE\"\" database-setup.sql\")",
       "Bash(psql:*)",
       "Bash(cmd.exe /c \"where psql\")",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(dotnet ef migrations add:*)",
+      "Bash(set PGPASSWORD=YrSIsEidlvQRLXLjpMkdHmDnsWsiqHkH:*)",
+      "Bash(where:*)",
+      "Bash(dotnet ef database update:*)",
+      "Bash(dotnet script:*)",
+      "Bash(csc:*)",
+      "Bash(CheckUsersSchema.exe:*)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(dotnet run:*)",
+      "Bash(dotnet ef migrations:*)",
+      "Bash(cmd.exe /c \"del Convoy.Data\\Migrations\\20260127063917_UpdateUsersTableWithPhpApiFields.*\")",
+      "Bash(cmd.exe /c \"del SchemaChecker\\RunSqlScript.cs\")",
+      "Bash(dotnet clean:*)",
+      "Bash(cmd.exe /c \"del Convoy.Data\\Migrations\\20260127065133_SyncUsersTableWithDatabase.*\")"
     ],
     "deny": [],
     "ask": []

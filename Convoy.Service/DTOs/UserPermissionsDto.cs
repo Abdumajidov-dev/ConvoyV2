@@ -23,6 +23,8 @@ public class UserPermissionsDto
 
     [JsonPropertyName("phone")]
     public string Phone { get; set; } = string.Empty;
+    [JsonPropertyName("branch_guid")]
+    public string BranchGuid { get; set; }
 
     [JsonPropertyName("role")]
     public string? Role { get; set; }

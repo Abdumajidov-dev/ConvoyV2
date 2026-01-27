@@ -90,6 +90,7 @@ public class UserService : IUserService
                 Phone = u.Phone,
                 BranchGuid = u.BranchGuid,
                 IsActive = u.IsActive,
+                Image = u.Image,
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt
             })
@@ -456,7 +457,7 @@ public class UserService : IUserService
         existingUser.Phone = user.Phone;
         existingUser.WorkerGuid = user.WorkerGuid;
         existingUser.BranchGuid = user.BranchGuid;
-        existingUser.PositionId = user.PositionId;
+        //existingUser.PositionId = user.PositionId;
         existingUser.Image = user.Image;
         existingUser.IsActive = user.IsActive;
 

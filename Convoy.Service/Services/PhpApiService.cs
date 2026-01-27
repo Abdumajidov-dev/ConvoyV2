@@ -112,8 +112,7 @@ public class PhpApiService : IPhpApiService
     {
         try
         {
-            var endpoint = "http://delivery.garant.uz/api/auth/otp";
-            //var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/otp";
+            var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/otp";
             var payload = new { phone = phoneNumber };
             var serializedPayload = JsonSerializer.Serialize(payload, _jsonOptions);
             var content = new StringContent(
@@ -178,8 +177,8 @@ public class PhpApiService : IPhpApiService
     {
         try
         {
-            var endpoint = "http://delivery.garant.uz/api/auth/otp/verify";
-            //var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/otp/verify";
+            //var endpoint = "http://delivery.garant.uz/api/auth/otp/verify";
+            var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/otp/verify";
             var payload = new { phone = phoneNumber, otp_code = otpCode };
             var serializedPayload = JsonSerializer.Serialize(payload, _jsonOptions);
             var content = new StringContent(
@@ -238,15 +237,18 @@ public class PhpApiService : IPhpApiService
 
     /// <summary>
     /// JWT token orqali user ma'lumotlarini PHP API'dan oladi
-    /// Proxy: GET /auth/me
+    /// Proxy: GET /auth/unduruv/me
     /// </summary>
     public async Task<PhpApiResponse<PhpUserDto>> GetMeAsync(string token)
     {
         try
         {
-            var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/me";
+         
+            //var endpoint = $"http://10.100.104.104:1004/api/auth/unduruv/me";
+            var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/unduruv/me";
 
-            _logger.LogInformation("Calling PHP API get me: {Endpoint}", endpoint);
+            _logger.LogInformation("Calling PHP API get me: {Endpoint} with token: {Token}",
+                endpoint, token.Substring(0, Math.Min(20, token.Length)) + "...");
 
             // JWT token'ni Authorization header'ga qo'shish
             var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
@@ -255,17 +257,34 @@ public class PhpApiService : IPhpApiService
             var response = await _httpClient.SendAsync(request);
             var responseBody = await response.Content.ReadAsStringAsync();
 
-            _logger.LogDebug("PHP API get me response: {Response}", responseBody);
+            _logger.LogInformation("PHP API get me response status: {StatusCode}, body: {Response}",
+                response.StatusCode, responseBody);
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("PHP API returned status code {StatusCode} for get me",
                     response.StatusCode);
 
+                // PHP API xatolik qaytarsa ham JSON parse qilishga harakat qilamiz
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<PhpApiResponse<PhpUserDto>>(responseBody, _jsonOptions);
+                    if (errorResponse != null)
+                    {
+                        return errorResponse;
+                    }
+                }
+                catch
+                {
+                    // JSON emas bo'lsa, oddiy xatolik xabarini qaytaramiz
+                }
+
                 return new PhpApiResponse<PhpUserDto>
                 {
                     Status = false,
-                    Message = $"PHP API xatolik: {response.StatusCode}",
+                    Message = response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                        ? "Token noto'g'ri yoki muddati tugagan"
+                        : $"PHP API xatolik: {response.StatusCode}",
                     Result = null
                 };
             }
@@ -304,6 +323,8 @@ public class PhpApiService : IPhpApiService
     {
         try
         {
+            var _baseUrl = "https://garant-hr.uz/api/";
+            //var _baseUrl = "http://10.100.104.120:8008/api/";
             var endpoint = $"{_baseUrl.TrimEnd('/')}/branch-list";
 
             _logger.LogInformation("Calling PHP API branch-list endpoint: {Endpoint} with search term: {SearchTerm}",

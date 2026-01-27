@@ -25,14 +25,35 @@ public class User : Auditable
     [Column("phone")]
     public string? Phone { get; set; }
 
+    /// <summary>
+    /// PHP API'dan kelgan filial_guid (branch GUID)
+    /// </summary>
     [Column("branch_guid")]
     public string? BranchGuid { get; set; }
+
+    /// <summary>
+    /// PHP API'dan kelgan filial_name (branch nomi)
+    /// </summary>
+    [Column("branch_name")]
+    public string? BranchName { get; set; }
 
     /// <summary>
     /// PHP API'dan kelgan user image URL
     /// </summary>
     [Column("image")]
     public string? Image { get; set; }
+
+    /// <summary>
+    /// PHP API'dan kelgan user type (e.g., "worker", "admin")
+    /// </summary>
+    [Column("user_type")]
+    public string? UserType { get; set; }
+
+    /// <summary>
+    /// PHP API'dan kelgan user role (e.g., "operator_admin_chat", "driver")
+    /// </summary>
+    [Column("role")]
+    public string? Role { get; set; }
 
     /// <summary>
     /// PHP API'dan kelgan worker_guid (UUID)
