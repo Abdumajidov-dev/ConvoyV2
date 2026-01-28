@@ -103,6 +103,12 @@ public class PhpUserDto
     [JsonPropertyName("position_id")]
     public int? PositionId { get; set; }
 
+    /// <summary>
+    /// PHP API /auth/unduruv/me endpoint'dan kelgan app ma'lumotlari
+    /// </summary>
+    [JsonPropertyName("app")]
+    public PhpAppDto? App { get; set; }
+
     // Backward compatibility (eski API endpoint'lar uchun)
     [JsonPropertyName("id")]
     public int Id
@@ -133,6 +139,42 @@ public class PhpUserDto
 
     [JsonPropertyName("created_at")]
     public string? CreatedAt { get; set; }
+}
+
+/// <summary>
+/// PHP API /auth/unduruv/me response'dagi app obyekti
+/// </summary>
+public class PhpAppDto
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("base_url")]
+    public string BaseUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("which_project")]
+    public string WhichProject { get; set; } = string.Empty;
+
+    [JsonPropertyName("allowed")]
+    public PhpAppAllowedDto? Allowed { get; set; }
+}
+
+/// <summary>
+/// PHP API /auth/unduruv/me response'dagi app.allowed obyekti
+/// </summary>
+public class PhpAppAllowedDto
+{
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = string.Empty;
+
+    [JsonPropertyName("which_project")]
+    public string WhichProject { get; set; } = string.Empty;
+
+    [JsonPropertyName("permissions")]
+    public List<string> Permissions { get; set; } = new();
 }
 
 /// <summary>

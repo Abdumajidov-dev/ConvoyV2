@@ -177,7 +177,6 @@ public class PhpApiService : IPhpApiService
     {
         try
         {
-            //var endpoint = "http://delivery.garant.uz/api/auth/otp/verify";
             var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/otp/verify";
             var payload = new { phone = phoneNumber, otp_code = otpCode };
             var serializedPayload = JsonSerializer.Serialize(payload, _jsonOptions);
@@ -244,7 +243,6 @@ public class PhpApiService : IPhpApiService
         try
         {
          
-            //var endpoint = $"http://10.100.104.104:1004/api/auth/unduruv/me";
             var endpoint = $"{_baseUrl.TrimEnd('/')}/auth/unduruv/me";
 
             _logger.LogInformation("Calling PHP API get me: {Endpoint} with token: {Token}",
