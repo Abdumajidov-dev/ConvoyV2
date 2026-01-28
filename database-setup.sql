@@ -15,25 +15,29 @@
 -- id: Local database primary key (internal use)
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER UNIQUE,  -- PHP API worker ID
+    user_id INTEGER UNIQUE,     -- PHP API worker ID
     name VARCHAR(200) NOT NULL,
     username VARCHAR(100),
     phone VARCHAR(20),
-    branch_guid VARCHAR(100),  -- PHP API branch GUID
-    worker_guid VARCHAR(100),  -- PHP API worker GUID
-    position_id INTEGER,       -- PHP API position ID
-    image VARCHAR(500),        -- PHP API user image URL
+    branch_guid VARCHAR(100),   -- PHP API branch GUID
+    branch_name VARCHAR(200),   -- PHP API branch name
+    worker_guid VARCHAR(100),   -- PHP API worker GUID
+    position_id INTEGER,        -- PHP API position ID
+    image VARCHAR(500),         -- PHP API user image URL
+    user_type VARCHAR(50),      -- PHP API user type (worker, admin, etc.)
+    role VARCHAR(100),          -- PHP API user role (operator_admin_chat, driver, etc.)
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     delete_at TIMESTAMPTZ
 );
 
--- Users index
-CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+-- Users indexes
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active) WHERE is_active = true;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role) WHERE role IS NOT NULL;
 
 -- ============================================
 -- 3. LOCATIONS PARTITIONED TABLE

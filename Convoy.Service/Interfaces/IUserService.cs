@@ -33,4 +33,10 @@ public interface IUserService
     /// User entity yangilash (AuthService'dan kerak)
     /// </summary>
     Task UpdateAsync(long id, Domain.Entities.User user);
+
+    /// <summary>
+    /// User'ni active/inactive qilish (SignalR connection/disconnection uchun)
+    /// user_id (PHP worker_id) bo'yicha topiladi
+    /// </summary>
+    Task SetUserActiveStatusAsync(int userId, bool isActive);
 }

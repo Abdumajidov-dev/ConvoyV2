@@ -15,7 +15,6 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 
 // PostgreSQL connection string - support both Railway DATABASE_URL and custom ConnectionStrings
 // Priority: ConnectionStrings__DefaultConnection > DATABASE_URL > appsettings.json
@@ -23,11 +22,6 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
                        ?? builder.Configuration["DATABASE_URL"]
                        ?? throw new InvalidOperationException("Database connection string is not configured! Set either 'ConnectionStrings__DefaultConnection' or 'DATABASE_URL' environment variable.");
 
-// DEBUG: Log connection string to verify it's loaded correctly
-Console.WriteLine($"========================================");
-Console.WriteLine($"ENVIRONMENT: {builder.Environment.EnvironmentName}");
-Console.WriteLine($"CONNECTION STRING SOURCE: {(builder.Configuration.GetConnectionString("DefaultConnection") != null ? "ConnectionStrings:DefaultConnection" : builder.Configuration["DATABASE_URL"] != null ? "DATABASE_URL" : "NONE")}");
-Console.WriteLine($"CONNECTION STRING LENGTH: {connectionString?.Length ?? 0}");
 
 // Only show first 50 chars to avoid exposing password
 var preview = string.IsNullOrEmpty(connectionString) ? "EMPTY OR NULL" : connectionString.Substring(0, Math.Min(50, connectionString.Length));
@@ -49,11 +43,6 @@ if (connectionString.StartsWith("postgres://") || connectionString.StartsWith("p
         var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : ""; // Unescape password
 
         connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={password};Include Error Detail=true";
-        Console.WriteLine($"✅ CONVERTED TO NPGSQL FORMAT");
-        Console.WriteLine($"Host: {host}");
-        Console.WriteLine($"Port: {port}");
-        Console.WriteLine($"Database: {database}");
-        Console.WriteLine($"Username: {username}");
     }
     catch (Exception ex)
     {
@@ -62,9 +51,6 @@ if (connectionString.StartsWith("postgres://") || connectionString.StartsWith("p
         throw new InvalidOperationException($"Failed to parse PostgreSQL URI: {ex.Message}", ex);
     }
 }
-
-Console.WriteLine($"FINAL CONNECTION STRING LENGTH: {connectionString.Length}");
-Console.WriteLine($"========================================");
 
 // EF Core DbContext (User va boshqa EF Core entity'lar uchun)
 builder.Services.AddDbContext<AppDbConText>(options =>

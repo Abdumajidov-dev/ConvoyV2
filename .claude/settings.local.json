@@ -30,7 +30,10 @@
       "Bash(cmd.exe /c \"del Convoy.Data\\Migrations\\20260127063917_UpdateUsersTableWithPhpApiFields.*\")",
       "Bash(cmd.exe /c \"del SchemaChecker\\RunSqlScript.cs\")",
       "Bash(dotnet clean:*)",
-      "Bash(cmd.exe /c \"del Convoy.Data\\Migrations\\20260127065133_SyncUsersTableWithDatabase.*\")"
+      "Bash(cmd.exe /c \"del Convoy.Data\\Migrations\\20260127065133_SyncUsersTableWithDatabase.*\")",
+      "Bash(cmd.exe /c \"findstr /i \"CREATE TABLE\" database-setup.sql\")",
+      "Bash(dotnet add:*)",
+      "Bash(cmd.exe /c \"findstr /n /c:\"\"public async Task UpdateAsync(long id, Domain.Entities.User user)\"\" Convoy.Service\\Services\\UserService.cs\")"
     ],
     "deny": [],
     "ask": []

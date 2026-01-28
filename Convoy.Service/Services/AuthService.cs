@@ -241,7 +241,7 @@ public class AuthService : IAuthService
                 existingUser.Image = phpUser.Photo;
                 existingUser.UserType = phpUser.Type;
                 existingUser.Role = phpUser.Role;
-                existingUser.IsActive = true; // Token active bo'lsa user ham active
+                //existingUser.IsActive = true; // Token active bo'lsa user ham active
 
                 await _userService.UpdateAsync(existingUser.Id, existingUser);
 
