@@ -466,4 +466,46 @@ public class UserService : IUserService
         _logger.LogInformation("User updated with user_id={UserId}, Name={Name}",
             user.UserId, user.Name);
     }
+
+    /// <summary>
+    /// User'ni active/inactive qilish (SignalR connection/disconnection uchun)
+    /// user_id (PHP worker_id) bo'yicha topiladi
+    /// </summary>
+    public async Task SetUserActiveStatusAsync(int userId, bool isActive)
+    {
+        try
+        {
+            // user_id (PHP worker_id) bo'yicha user topish
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (user == null)
+            {
+                _logger.LogWarning("User not found with user_id={UserId} for active status update", userId);
+                return;
+            }
+
+            // Status o'zgarmagan bo'lsa, skip qilish
+            if (user.IsActive == isActive)
+            {
+                _logger.LogDebug("User user_id={UserId} already has IsActive={IsActive}, skipping update",
+                    userId, isActive);
+                return;
+            }
+
+            // Status yangilash
+            user.IsActive = isActive;
+            user.UpdatedAt = DateTimeExtensions.NowInApplicationTime();
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("✅ User active status updated: user_id={UserId}, Name={Name}, IsActive={IsActive}",
+                userId, user.Name, isActive);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating active status for user_id={UserId}", userId);
+            throw;
+        }
+    }
 }
