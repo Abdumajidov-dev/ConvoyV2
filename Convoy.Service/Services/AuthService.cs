@@ -103,7 +103,7 @@ public class AuthService : IAuthService
     /// Token'ni decode qilib user ma'lumotlarini local DB'ga sync qiladi
     /// </summary>
     public async Task<AuthResponseDto<VerifyOtpResponseDto>> VerifyOtpAsync(string phoneNumber, string otpCode)
-    {
+     {
         try
         {
             _logger.LogInformation("Proxying verify_otp request to PHP API for phone: {Phone}", phoneNumber);
@@ -157,49 +157,48 @@ public class AuthService : IAuthService
     }
 
     /// <summary>
-    /// User ma'lumotlarini olish - Token'ni decode qilib local DB'dan oladi
-    /// PHP API'ga murojaat qilmasdan token ichidagi ma'lumotlardan foydalanadi
+    /// User ma'lumotlarini olish - PHP API'ga murojaat qiladi
+    /// PHP API'dan kelgan ma'lumotlarni Flutter uchun kerakli formatga o'tkazadi
     /// </summary>
     public async Task<AuthResponseDto<UserPermissionsDto>> GetMeAsync(string token)
     {
         try
         {
-            _logger.LogInformation("Decoding JWT token to get user data");
+            _logger.LogInformation("Calling PHP API get me with token");
 
-            // Token'ni decode qilish
-            var phpUser = _phpTokenService.DecodeToken(token);
+            // PHP API'ga murojaat qilish
+            var phpResponse = await _phpApiService.GetMeAsync(token);
 
-            if (phpUser == null || phpUser.WorkerId <= 0)
+            if (!phpResponse.Status || phpResponse.Result == null)
             {
-                _logger.LogWarning("Failed to decode token or invalid worker_id");
-                return AuthResponseDto<UserPermissionsDto>.Failure("Token noto'g'ri yoki muddati tugagan");
+                var errorMessage = phpResponse.GetMessage();
+                _logger.LogWarning("PHP API get me failed: {Message}", errorMessage);
+                return AuthResponseDto<UserPermissionsDto>.Failure(
+                    string.IsNullOrEmpty(errorMessage) ? "Token noto'g'ri yoki muddati tugagan" : errorMessage
+                );
             }
 
-            // Token muddatini tekshirish
-            if (!_phpTokenService.IsTokenValid(token))
-            {
-                _logger.LogWarning("Token expired for worker_id={WorkerId}", phpUser.WorkerId);
-                return AuthResponseDto<UserPermissionsDto>.Failure("Token muddati tugagan");
-            }
+            var phpUser = phpResponse.Result;
 
             // User'ni local database'ga sync qilish (create yoki update)
+            _logger.LogInformation("Syncing user data to local DB: WorkerId={WorkerId}", phpUser.WorkerId);
             await SyncUserFromTokenAsync(phpUser);
 
-            // Response DTO yaratish (token'dan olingan ma'lumotlar)
+            // Flutter uchun response DTO yaratish
             var response = new UserPermissionsDto
             {
                 UserId = phpUser.WorkerId,
-                BranchGuid = phpUser.BranchGuid ?? "",
                 Name = phpUser.Name,
-                Phone = phpUser.Phone,
                 Username = phpUser.Username,
-                Image = phpUser.Photo,
-                Role = phpUser.Role,
-                RoleId = new List<long>(), // PHP API'da boshqariladi
-                Permissions = new Dictionary<string, List<string>>() // PHP API'da boshqariladi
+                Image = phpUser.Image,
+                Phone = phpUser.Phone,
+                BranchGuid = phpUser.BranchGuid ?? phpUser.FilialGuid ?? "",
+                Role = phpUser.App?.Allowed?.Role ?? phpUser.Role,
+                RoleId = new List<long>(), // Bo'sh array
+                Permissions = new Dictionary<string, List<string>>() // Bo'sh object
             };
 
-            _logger.LogInformation("Successfully decoded token and synced user worker_id={WorkerId}", phpUser.WorkerId);
+            _logger.LogInformation("Successfully retrieved user data from PHP API: WorkerId={WorkerId}", phpUser.WorkerId);
 
             return AuthResponseDto<UserPermissionsDto>.Success(
                 response,
@@ -208,7 +207,7 @@ public class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting user from token");
+            _logger.LogError(ex, "Error getting user from PHP API");
             return AuthResponseDto<UserPermissionsDto>.Failure("Xatolik yuz berdi");
         }
     }
