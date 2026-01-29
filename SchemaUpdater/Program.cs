@@ -1,7 +1,7 @@
 using Npgsql;
 
-// Connection string - Railway production database
-var connectionString = "Host=crossover.proxy.rlwy.net;Port=31579;Database=railway;Username=postgres;Password=YrSIsEidlvQRLXLjpMkdHmDnsWsiqHkH;Include Error Detail=true";
+// Connection string - Docker production database
+var connectionString = "Host=172.17.0.1;Port=5432;Database=convoydb;Username=postgres;Password=GarantDockerPass;Include Error Detail=true";
 
 Console.WriteLine("🔧 Updating users table schema...\n");
 
@@ -10,7 +10,7 @@ try
     using var connection = new NpgsqlConnection(connectionString);
     await connection.OpenAsync();
 
-    Console.WriteLine("✅ Connected to database: railway\n");
+    Console.WriteLine("✅ Connected to database: convoydb\n");
 
     // Add user_id column (PHP API worker_id)
     Console.WriteLine("➡️  Adding user_id column...");
