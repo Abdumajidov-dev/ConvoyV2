@@ -397,23 +397,18 @@ public class UserService : IUserService
     {
         try
         {
-            var result = await _userRepository.SelectAsync(u => u.Id == userId);
+            var result = await _userRepository.SelectAsync(u => u.Id == (long)userId);
             if (result is null)
                 throw new CustomException(404, "User not found");
-            var newReport = new UserStatusReport{
-                UserId = userId,
-                Status = isActive,
-                CreatedAt = DateTimeExtensions.NowInApplicationTime()
-            };
-            var resultReport = await _userStatusReportRepository.InsertAsync(newReport);
-            if(resultReport is null)
-                throw new CustomException(500, "Could not create status report");
-            result.IsActive = isActive;
-            await _userStatusReportRepository.SaveAsync();
-            return true;
 
+            // User'ning IsActive statusni yangilash
+            result.IsActive = isActive;
+            await _userRepository.Update(result, result.Id);
+            await _userRepository.SaveAsync();
+
+            return true;
         }
-        catch(Exception ex)
+        catch(Exception)
         {
             return false;
         }

@@ -14,7 +14,9 @@ public class AppDbConText : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<OtpCode> OtpCodes { get; set; }
     public DbSet<TokenBlacklist> TokenBlacklists { get; set; }
-    public DbSet<UserStatusReport> userStatusReports { get; set; }
+    public DbSet<UserStatusReport> UserStatusReports { get; set; }
+    public DbSet<DeviceToken> DeviceTokens { get; set; }
+    public DbSet<AdminNotification> AdminNotifications { get; set; }
 
     // Location uchun DbSet YO'Q - u Dapper bilan ishlaydi
 
@@ -69,6 +71,75 @@ public class AppDbConText : DbContext
                   .WithMany()
                   .HasForeignKey(tb => tb.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // DeviceToken entity configuration
+        modelBuilder.Entity<DeviceToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.DeviceSystem).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Model).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DeviceId).IsRequired().HasMaxLength(100);
+
+            // Index for faster lookup
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.DeviceId);
+            entity.HasIndex(e => new { e.UserId, e.DeviceId }).IsUnique();
+
+            // Foreign key
+            entity.HasOne(dt => dt.User)
+                  .WithMany()
+                  .HasForeignKey(dt => dt.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // UserStatusReport entity configuration
+        modelBuilder.Entity<UserStatusReport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).IsRequired();
+
+            // Index for faster lookup
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.LastLocationTime);
+            entity.HasIndex(e => e.LastNotifiedAt);
+
+            // Foreign key
+            entity.HasOne(usr => usr.User)
+                  .WithMany()
+                  .HasForeignKey(usr => usr.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // AdminNotification entity configuration
+        modelBuilder.Entity<AdminNotification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.AdminUserId).IsRequired();
+            entity.Property(e => e.NotificationType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Message).IsRequired().HasMaxLength(1000);
+
+            // Indexes
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.AdminUserId);
+            entity.HasIndex(e => e.IsSent);
+            entity.HasIndex(e => e.IsRead);
+            entity.HasIndex(e => e.CreatedAt);
+
+            // Foreign keys
+            entity.HasOne(an => an.User)
+                  .WithMany()
+                  .HasForeignKey(an => an.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(an => an.AdminUser)
+                  .WithMany()
+                  .HasForeignKey(an => an.AdminUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

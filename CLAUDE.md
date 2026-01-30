@@ -277,6 +277,25 @@ Convoy/
 - **JWT integration**: User permissions can be checked via `IPermissionService.UserHasPermissionAsync()`
 - See `PERMISSION_SYSTEM_GUIDE.md` for complete documentation
 
+**14. SignalR User Active Status Tracking**
+- **Purpose**: Automatically mark users as active/inactive based on SignalR connection status
+- **Hub Methods**:
+  - `RegisterUser(userId)`: Client MUST call after connecting to mark user as ACTIVE
+  - `UnregisterUser(userId)`: Client calls to manually mark user as INACTIVE and disconnect
+- **Automatic Behavior**:
+  - `OnConnectedAsync`: Logs connection (does NOT mark user active automatically)
+  - `OnDisconnectedAsync`: Automatically marks user as INACTIVE when connection drops
+- **Connection Mapping**: In-memory `ConcurrentDictionary<string, int>` stores `ConnectionId -> UserId`
+- **User Lifecycle**:
+  1. Flutter connects → SignalR connection established
+  2. Flutter calls `RegisterUser(userId)` → User marked ACTIVE in database
+  3. Flutter disconnects (app closed/network issue) → User marked INACTIVE automatically
+  4. Flutter calls `UnregisterUser(userId)` → User marked INACTIVE + connection closed by server
+- **CRITICAL**: Flutter client MUST call `RegisterUser(userId)` after connection, otherwise disconnect won't mark user inactive (no mapping exists)
+- **App Lifecycle Handling**: Disconnect on app pause, reconnect + RegisterUser on app resume
+- **Multiple Devices**: Same user can connect from multiple devices, each tracked separately
+- See `SIGNALR_USER_ACTIVE_STATUS.md` and `SIGNALR_USER_STATUS_CHANGE.md` for complete documentation
+
 ## Database Schema
 
 ### Partitioned Table (Dapper)
@@ -417,17 +436,28 @@ If you need another partitioned table:
 - **CORS**: Currently set to `AllowAll` for development (restrict in production)
 - **Broadcasting from services**: Inject `IHubContext<LocationHub>` as `object?` to avoid circular dependencies
 - **Client methods** (callable from Flutter/JavaScript):
+  - `RegisterUser(int userId)`: **REQUIRED** - Mark user as ACTIVE (call after connection)
+  - `UnregisterUser(int userId)`: Mark user as INACTIVE and disconnect
   - `JoinUserTracking(int userId)`: Subscribe to specific user's location updates
   - `LeaveUserTracking(int userId)`: Unsubscribe from user
   - `JoinAllUsersTracking()`: Subscribe to all users' location updates
   - `LeaveAllUsersTracking()`: Unsubscribe from all
 - **Server events** (sent to clients):
   - `LocationUpdated`: Fired when new location created, payload is `LocationResponseDto`
+  - `UserRegistered`: Confirmation of successful user registration with `{user_id, is_active, message}`
+  - `UserUnregistered`: Confirmation of successful user unregistration with `{user_id, is_active, message}`
+  - `UserRegistrationFailed`: Registration failed with `{user_id, error}`
+  - `UserUnregistrationFailed`: Unregistration failed with `{user_id, error}`
   - `TestMessage`: Used by `SignalRTestController` for testing
+- **User Status Tracking**:
+  - Users marked ACTIVE when `RegisterUser(userId)` is called
+  - Users marked INACTIVE when connection drops (automatic) or `UnregisterUser(userId)` is called (manual)
+  - Connection-to-User mapping stored in-memory using `ConcurrentDictionary<string, int>`
+  - **CRITICAL**: Flutter MUST call `RegisterUser(userId)` after connecting, otherwise disconnect won't update user status
 - **Testing**: Use `SignalRTestController` endpoints to test broadcasting without creating real locations
   - `GET /api/signalrtest/health`: Check SignalR status
   - `POST /api/signalrtest/broadcast-test/{userId}`: Send test location to groups
-  - See `SIGNALR-TESTING-GUIDE.md` and `FLUTTER-SIGNALR-EXAMPLE.md` for detailed examples
+  - See `SIGNALR-TESTING-GUIDE.md`, `FLUTTER-SIGNALR-EXAMPLE.md`, `SIGNALR_USER_ACTIVE_STATUS.md`, and `SIGNALR_USER_STATUS_CHANGE.md` for detailed examples
 
 ### Authentication & External API Integration
 
@@ -644,6 +674,107 @@ public class YourService : IHostedService
 builder.Services.AddHostedService<YourService>();
 ```
 
+### SignalR User Active Status Tracking (Flutter)
+
+```dart
+import 'package:signalr_netcore/signalr_client.dart';
+
+class LocationSignalRService {
+  HubConnection? _hubConnection;
+  final String hubUrl = "https://your-api.com/hubs/location";
+  final int userId;
+
+  LocationSignalRService({required this.userId});
+
+  // 1. Connect and register user
+  Future<void> connect() async {
+    _hubConnection = HubConnectionBuilder()
+        .withUrl(hubUrl)
+        .withAutomaticReconnect() // Auto-reconnect on network issues
+        .build();
+
+    _setupListeners();
+
+    await _hubConnection!.start();
+
+    // CRITICAL: Must call RegisterUser after connection
+    await registerUser();
+  }
+
+  // 2. Register user (mark as ACTIVE)
+  Future<void> registerUser() async {
+    try {
+      await _hubConnection!.invoke("RegisterUser", args: [userId]);
+      print("🟢 User marked as ACTIVE: userId=$userId");
+    } catch (e) {
+      print("❌ Error registering user: $e");
+    }
+  }
+
+  // 3. Unregister user (mark as INACTIVE + disconnect)
+  Future<void> unregisterUser() async {
+    try {
+      await _hubConnection!.invoke("UnregisterUser", args: [userId]);
+      print("🔴 User unregistered and disconnected");
+      await Future.delayed(Duration(milliseconds: 500));
+      _hubConnection = null;
+    } catch (e) {
+      print("❌ Error unregistering user: $e");
+    }
+  }
+
+  // 4. Listen for server events
+  void _setupListeners() {
+    _hubConnection!.on("UserRegistered", (args) {
+      print("✅ User registered: ${args?[0]}");
+    });
+
+    _hubConnection!.on("UserUnregistered", (args) {
+      print("🔴 User unregistered: ${args?[0]}");
+    });
+
+    _hubConnection!.on("LocationUpdated", (args) {
+      print("📍 Location updated: ${args?[0]}");
+    });
+  }
+
+  // 5. Disconnect (automatic inactive marking)
+  Future<void> disconnect() async {
+    await _hubConnection?.stop();
+    print("🔴 Disconnected - user marked INACTIVE automatically");
+  }
+}
+
+// App lifecycle handling
+class MyApp extends StatefulWidget with WidgetsBindingObserver {
+  late LocationSignalRService _signalRService;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _signalRService = LocationSignalRService(userId: currentUserId);
+    _signalRService.connect();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _signalRService.disconnect(); // User marked inactive
+    } else if (state == AppLifecycleState.resumed) {
+      _signalRService.connect(); // User marked active
+    }
+  }
+
+  @override
+  void dispose() {
+    _signalRService.disconnect();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+}
+```
+
 ## Troubleshooting
 
 ### "Partition does not exist" Error
@@ -724,6 +855,25 @@ builder.Services.AddHostedService<YourService>();
   DELETE FROM token_blacklist WHERE expires_at < NOW();
   ```
 
+### SignalR User Active Status Issues
+- **User not marked inactive on disconnect**: Flutter didn't call `RegisterUser(userId)` after connecting
+  - **Solution**: Add `await registerUser()` after `await _hubConnection!.start()`
+- **User marked inactive immediately after connect**: Network issue causing rapid connect/disconnect
+  - **Solution**: Use `.withAutomaticReconnect()` in HubConnectionBuilder
+- **User stays active after app closes**: Flutter didn't properly disconnect
+  - **Solution**: Handle app lifecycle (pause/resume) with `WidgetsBindingObserver`
+  - Call `disconnectHub()` on pause, `connect() + registerUser()` on resume
+- **Multiple users marked inactive when one disconnects**: Bug in ConnectionId -> UserId mapping
+  - **Solution**: Check backend logs for connection ID mismatches
+- **UnregisterUser not working**: SignalR not connected
+  - **Solution**: Use hybrid approach - try SignalR first, fallback to REST API `PATCH /api/users/{id}/status?isActive=false`
+- **Check user status in database**:
+  ```sql
+  SELECT user_id, name, is_active, updated_at
+  FROM users
+  WHERE user_id = 5475;
+  ```
+
 ## Performance Considerations
 
 - **Partition pruning**: Always include `recorded_at` in WHERE clause for best query performance
@@ -741,6 +891,8 @@ builder.Services.AddHostedService<YourService>();
 - **`PERMISSION_SYSTEM_GUIDE.md`**: Complete Permission & Role-Based Access Control (RBAC) guide - MANDATORY for authorization
 - **`SIGNALR-TESTING-GUIDE.md`**: Complete testing guide for SignalR real-time features
 - **`FLUTTER-SIGNALR-EXAMPLE.md`**: Flutter client implementation examples
+- **`SIGNALR_USER_ACTIVE_STATUS.md`**: SignalR user active/inactive tracking - CRITICAL for connection lifecycle
+- **`SIGNALR_USER_STATUS_CHANGE.md`**: User manual status change and disconnect - Flutter integration patterns
 - **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end AES-256 encryption implementation for Flutter (request/response encryption)
 - **`ENCRYPTION_EXCLUDED_ROUTES_GUIDE.md`**: How to exclude specific routes from encryption (e.g., `/api/locations`)
 - **`TELEGRAM_SERVICE_GUIDE.md`**: Telegram bot integration - kanalga xabar yuborish (locations, alerts, reports)
