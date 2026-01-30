@@ -12,11 +12,16 @@ namespace Convoy.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IDeviceTokenService _deviceTokenService;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(
+        IAuthService authService,
+        IDeviceTokenService deviceTokenService,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
+        _deviceTokenService = deviceTokenService;
         _logger = logger;
     }
 
@@ -183,6 +188,36 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Device token'ni saqlash yoki yangilash (login qilingandan keyin chaqiriladi)
+    /// </summary>
+    [HttpPost("save_device_token")]
+    [Authorize]
+    public async Task<IActionResult> SaveDeviceToken([FromBody] SaveDeviceTokenRequest request)
+    {
+        try
+        {
+            var result = await _deviceTokenService.SaveOrUpdateDeviceTokenAsync(request.UserId, request.DeviceInfo);
+
+            return Ok(new
+            {
+                status = result,
+                message = result ? "Device token saqlandi" : "Xatolik yuz berdi",
+                data = (object?)null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving device token for user {UserId}", request.UserId);
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Internal server error",
+                data = (object?)null
+            });
+        }
+    }
+
+    /// <summary>
     /// Logout - tokenni bekor qilish (blacklist'ga qo'shish)
     /// </summary>
     [HttpPost("logout")]
@@ -250,4 +285,13 @@ public class VerifyOtpRequest
 
     [JsonProperty("otp_code")]
     public string OtpCode { get; set; } = string.Empty;
+}
+
+public class SaveDeviceTokenRequest
+{
+    [JsonProperty("user_id")]
+    public int UserId { get; set; }
+
+    [JsonProperty("device_info")]
+    public DeviceInfoDto DeviceInfo { get; set; } = null!;
 }

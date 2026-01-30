@@ -19,11 +19,11 @@ public class DatabaseInitializerService : IHostedService
     public DatabaseInitializerService(
         IServiceScopeFactory scopeFactory,
         ILogger<DatabaseInitializerService> logger,
-        NpgsqlConnection connection)
+        string connectionString)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _connectionString = connection.ConnectionString;
+        _connectionString = connectionString;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

@@ -56,12 +56,12 @@ if (connectionString.StartsWith("postgres://") || connectionString.StartsWith("p
 builder.Services.AddDbContext<AppDbConText>(options =>
     options.UseNpgsql(connectionString));
 
-// Dapper uchun Npgsql connection (Singleton - Connection pooling PostgreSQL tomonidan boshqariladi)
-builder.Services.AddSingleton(sp =>
-{
-    var conn = new NpgsqlConnection(connectionString);
-    return conn;
-});
+// Dapper uchun connection string (Singleton - background services uchun)
+builder.Services.AddSingleton<string>(sp => connectionString);
+
+// Dapper uchun NpgsqlConnection (Scoped - har request uchun yangi connection)
+// Connection pooling PostgreSQL tomonidan boshqariladi
+builder.Services.AddScoped<NpgsqlConnection>(sp => new NpgsqlConnection(connectionString));
 
 // Repositories
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
@@ -94,6 +94,8 @@ builder.Services.AddScoped<IPhpTokenService, PhpTokenService>(); // JWT token de
 // builder.Services.AddScoped<IOtpService, OtpService>();
 // builder.Services.AddScoped<ISmsService, CompositeSmsService>();
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
+builder.Services.AddScoped<IDeviceTokenService, Convoy.Service.Services.DeviceTokens.DeviceTokenService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
@@ -101,6 +103,7 @@ builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
 // Background services (ordering matters - DatabaseInitializer birinchi)
 builder.Services.AddHostedService<DatabaseInitializerService>();
 builder.Services.AddHostedService<PartitionMaintenanceService>();
+builder.Services.AddHostedService<Convoy.Service.Services.Backrounds.CheckLocationCreatedBackrounService>();
 
 // PHP Token Authorization (JWT authentication o'chirilgan - PHP token ishlatiladi)
 // Custom authorization handler orqali PHP token'larni validate qilamiz
