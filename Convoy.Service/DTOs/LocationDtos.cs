@@ -304,6 +304,49 @@ public class LocationResponseDto
 
     [JsonPropertyName("created_at")]
     public DateTime CreatedAt { get; set; }
+
+    // Stopped time - o'sha joyda qancha vaqt turganligini ko'rsatadi (HH:mm formatda, masalan "00:30")
+    [JsonPropertyName("stopped_time")]
+    public string? StoppedTime { get; set; }
+}
+
+/// <summary>
+/// Clustered location DTO - 10 metr oralig'dagi locationlarni groupalangan holda
+/// Admin hodimlar uchun clustering qilingan locationlar
+/// </summary>
+public class ClusteredLocationDto
+{
+    [JsonPropertyName("cluster_id")]
+    public int ClusterId { get; set; }
+
+    [JsonPropertyName("user_id")]
+    public int UserId { get; set; }
+
+    // Cluster markazidagi koordinatalar (o'rtacha)
+    [JsonPropertyName("latitude")]
+    public decimal Latitude { get; set; }
+
+    [JsonPropertyName("longitude")]
+    public decimal Longitude { get; set; }
+
+    // Cluster ichidagi birinchi va oxirgi vaqt
+    [JsonPropertyName("start_time")]
+    public DateTime StartTime { get; set; }
+
+    [JsonPropertyName("end_time")]
+    public DateTime EndTime { get; set; }
+
+    // O'sha joyda turgan vaqt (daqiqalarda)
+    [JsonPropertyName("stopped_time")]
+    public int StoppedTime { get; set; }
+
+    // Cluster ichidagi locationlar soni
+    [JsonPropertyName("location_count")]
+    public int LocationCount { get; set; }
+
+    // Cluster ichidagi barcha locationlar (optional - kerak bo'lsa)
+    [JsonPropertyName("locations")]
+    public List<LocationResponseDto>? Locations { get; set; }
 }
 
 /// <summary>

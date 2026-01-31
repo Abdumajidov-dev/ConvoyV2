@@ -12,8 +12,32 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using System.Text;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Firebase initialization - device token push notifications uchun
+try
+{
+    var firebaseCredentialsPath = Path.Combine(AppContext.BaseDirectory, "firebase-credentials.json");
+    if (File.Exists(firebaseCredentialsPath))
+    {
+        FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromFile(firebaseCredentialsPath)
+        });
+        Console.WriteLine("✅ Firebase initialized successfully");
+    }
+    else
+    {
+        Console.WriteLine("⚠️ Firebase credentials file not found. Push notifications will not work.");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Firebase initialization failed: {ex.Message}");
+}
 
 
 // PostgreSQL connection string - support both Railway DATABASE_URL and custom ConnectionStrings
@@ -83,9 +107,10 @@ builder.Services.AddScoped<ILocationService>(sp =>
     var locationRepo = sp.GetRequiredService<ILocationRepository>();
     var mapper = sp.GetRequiredService<AutoMapper.IMapper>();
     var logger = sp.GetRequiredService<ILogger<LocationService>>();
+    var clusteringService = sp.GetRequiredService<LocationClusteringService>();
     var hubContext = sp.GetService<IHubContext<Convoy.Api.Hubs.LocationHub>>();
     var telegramService = sp.GetService<ITelegramService>();
-    return new LocationService(locationRepo, mapper, logger, hubContext, telegramService);
+    return new LocationService(locationRepo, mapper, logger, clusteringService, hubContext, telegramService);
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -96,6 +121,7 @@ builder.Services.AddScoped<IPhpTokenService, PhpTokenService>(); // JWT token de
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddScoped<IDeviceTokenService, Convoy.Service.Services.DeviceTokens.DeviceTokenService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<LocationClusteringService>(); // Location clustering service
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
@@ -218,6 +244,9 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Device token middleware (MUST run AFTER authentication to get user_id from JWT)
+app.UseDeviceToken();
 
 app.MapControllers();
 

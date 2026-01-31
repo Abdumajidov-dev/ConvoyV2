@@ -67,6 +67,7 @@ namespace Convoy.Service.Services.DeviceTokens
                         DeviceId = deviceInfo.DeviceId ?? "android",
                         IsPhysicalDevice = true,
                         IsActive = true,
+                        CreatedAt = DateTime.UtcNow
                         //CreatedAt = TimeHelper.GetCurrentServerTime().ToString(),
                         //UpdatedAt = TimeHelper.GetCurrentServerTime().ToString(),
                     };

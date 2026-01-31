@@ -19,17 +19,20 @@ public class LocationService : ILocationService
     private readonly ILogger<LocationService> _logger;
     private readonly object? _locationHubContext;
     private readonly ITelegramService? _telegramService;
+    private readonly LocationClusteringService _clusteringService;
 
     public LocationService(
         ILocationRepository locationRepository,
         IMapper mapper,
         ILogger<LocationService> logger,
+        LocationClusteringService clusteringService,
         object? locationHubContext = null,
         ITelegramService? telegramService = null)
     {
         _locationRepository = locationRepository;
         _mapper = mapper;
         _logger = logger;
+        _clusteringService = clusteringService;
         _locationHubContext = locationHubContext;
         _telegramService = telegramService;
     }
@@ -490,7 +493,7 @@ public class LocationService : ILocationService
             {
                 // Ikkalasi ham null - BARCHA active userlarni olish
                 var allUsers = await userService.GetAllActiveUsersAsync();
-                userIds = allUsers.Select(u => (int)u.Id).ToList();
+                userIds = allUsers.Select(u => (int)u.UserId).ToList();
 
                 if (!userIds.Any())
                 {
@@ -535,12 +538,21 @@ public class LocationService : ILocationService
 
             foreach (var userId in userIds)
             {
-                var user = await userService.GetByIdAsync(userId);
+                var user = await userService.GetByUserIdDtoAsync(userId);
                 if (user == null)
                 {
                     _logger.LogWarning("User not found: UserId={UserId}", userId);
                     continue;
                 }
+
+                // User'ning locationlarini olish
+                var userLocations = locationsByUser.GetValueOrDefault(userId, new List<LocationResponseDto>());
+
+                // Locationlarni clustering qilib, faqat cluster markazidagi locationlarni olish
+                // Har bir cluster uchun 1 ta location qaytaradi (stopped_time bilan)
+                var filteredLocations = userLocations.Any()
+                    ? _clusteringService.GetFilteredLocationsWithStoppedTime(userLocations, userId)
+                    : new List<LocationResponseDto>();
 
                 var userWithLocations = new UserWithLocationsDto
                 {
@@ -553,7 +565,7 @@ public class LocationService : ILocationService
                     IsActive = user.IsActive,
                     CreatedAt = user.CreatedAt,
                     UpdatedAt = user.UpdatedAt,
-                    Locations = locationsByUser.GetValueOrDefault(userId, new List<LocationResponseDto>())
+                    Locations = filteredLocations  // Faqat cluster markazidagi locationlar (stopped_time bilan)
                 };
 
                 result.Add(userWithLocations);
@@ -574,14 +586,14 @@ public class LocationService : ILocationService
                 filterInfo = $"BARCHA {userIds.Count} ta active user";
             }
 
-            var totalLocations = result.Sum(u => u.Locations.Count);
+            var totalFilteredLocations = result.Sum(u => u.Locations.Count);
 
-            _logger.LogInformation("Retrieved {Count} locations for {FilterInfo} on Date={Date}",
-                totalLocations, filterInfo, parsedDate.ToString("yyyy-MM-dd"));
+            _logger.LogInformation("Retrieved {FilteredCount} filtered locations (cluster representatives with stopped_time) for {FilterInfo} on Date={Date}",
+                totalFilteredLocations, filterInfo, parsedDate.ToString("yyyy-MM-dd"));
 
             return ServiceResult<IEnumerable<UserWithLocationsDto>>.Ok(
                 result,
-                $"{filterInfo} uchun {parsedDate:yyyy-MM-dd} kunida {totalLocations} ta location olindi");
+                $"{filterInfo} uchun {parsedDate:yyyy-MM-dd} kunida {totalFilteredLocations} ta location olindi (clustering bilan)");
         }
         catch (Exception ex)
         {

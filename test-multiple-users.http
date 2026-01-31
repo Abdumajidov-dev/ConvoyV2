@@ -1,0 +1,83 @@
+### Test Multiple Users Locations Endpoint
+### Bu faylni REST Client extension bilan ishlatish mumkin
+
+### 1. Test with date only (all active users)
+POST http://localhost:5084/api/locations/multiple_users
+Content-Type: application/json
+
+{
+  "user_ids": null,
+  "branch_guid": null,
+  "date": "2026-01-31",
+  "start_hour": null,
+  "end_hour": null,
+  "limit": 100
+}
+
+### 2. Test with specific user_ids
+POST http://localhost:5084/api/locations/multiple_users
+Content-Type: application/json
+
+{
+  "user_ids": [5475, 5476],
+  "branch_guid": null,
+  "date": "2026-01-31",
+  "start_hour": null,
+  "end_hour": null,
+  "limit": 100
+}
+
+### 3. Test with time filters
+POST http://localhost:5084/api/locations/multiple_users
+Content-Type: application/json
+
+{
+  "user_ids": null,
+  "branch_guid": null,
+  "date": "2026-01-31",
+  "start_hour": "09:00",
+  "end_hour": "18:00",
+  "limit": 100
+}
+
+### 4. Test with specific user_ids and time filter
+POST http://localhost:5084/api/locations/multiple_users
+Content-Type: application/json
+
+{
+  "user_ids": [5475],
+  "branch_guid": null,
+  "date": "2026-01-31",
+  "start_hour": "09:00",
+  "end_hour": "18:00",
+  "limit": 50
+}
+
+### Expected Response Format:
+### {
+###   "status": true,
+###   "message": "BARCHA 10 ta active user uchun 2026-01-31 kunida 150 ta location olindi",
+###   "data": [
+###     {
+###       "id": 1,
+###       "name": "User Name",
+###       "phone": "+998901234567",
+###       "branch_guid": "...",
+###       "branch": "Branch Name",
+###       "image": null,
+###       "is_active": true,
+###       "created_at": "...",
+###       "updated_at": "...",
+###       "locations": [
+###         {
+###           "id": 123,
+###           "user_id": 5475,
+###           "latitude": 41.311151,
+###           "longitude": 69.279737,
+###           "recorded_at": "2026-01-31T09:15:00",
+###           ...
+###         }
+###       ]
+###     }
+###   ]
+### }

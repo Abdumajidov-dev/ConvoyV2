@@ -424,6 +424,23 @@ public class UserService : IUserService
     }
 
     /// <summary>
+    /// PHP API worker_id (user_id) bo'yicha user DTO'sini olish
+    /// Multiple users locations uchun kerak
+    /// </summary>
+    public async Task<UserResponseDto?> GetByUserIdDtoAsync(int userId)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.UserId == userId);
+
+        if (user == null)
+        {
+            return null;
+        }
+
+        return _mapper.Map<UserResponseDto>(user);
+    }
+
+    /// <summary>
     /// User entity yaratish (AuthService'dan)
     /// </summary>
     public async Task CreateAsync(User user)

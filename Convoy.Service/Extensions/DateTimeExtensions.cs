@@ -108,20 +108,16 @@ public static class DateTimeExtensions
     /// Kun boshi (00:00:00) va oxiri (23:59:59) uchun DateTime range yaratish
     /// Database query'larda ishlatiladi
     /// </summary>
-    /// <param name="date">Kun sanasi</param>
+    /// <param name="date">Kun sanasi (UTC sifatida qabul qilinadi)</param>
     /// <returns>Tuple: (startDate UTC, endDate UTC)</returns>
     public static (DateTime startDate, DateTime endDate) ToDateRange(this DateTime date)
     {
-        // Faqat kun qismini olish
+        // Faqat kun qismini olish va UTC sifatida belgilash
         var dateOnly = date.Date;
 
-        // Application timezone'ida kun boshi va oxiri
-        var startDateLocal = DateTime.SpecifyKind(dateOnly, DateTimeKind.Unspecified);
-        var endDateLocal = DateTime.SpecifyKind(dateOnly.AddDays(1), DateTimeKind.Unspecified);
-
-        // UTC'ga o'tkazish
-        var startDate = TimeZoneInfo.ConvertTimeToUtc(startDateLocal, ApplicationTimeZone);
-        var endDate = TimeZoneInfo.ConvertTimeToUtc(endDateLocal, ApplicationTimeZone);
+        // UTC'da kun boshi va oxiri (timezone konvertatsiya qilmasdan)
+        var startDate = DateTime.SpecifyKind(dateOnly, DateTimeKind.Utc);
+        var endDate = DateTime.SpecifyKind(dateOnly.AddDays(1), DateTimeKind.Utc);
 
         return (startDate, endDate);
     }

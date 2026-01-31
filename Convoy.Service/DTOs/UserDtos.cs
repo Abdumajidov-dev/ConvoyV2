@@ -51,7 +51,8 @@ public class UserResponseDto
 {
     [JsonPropertyName("id")]
     public long Id { get; set; }
-
+    [JsonPropertyName("user_id")]
+    public int UserId { get; set; }
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -164,7 +165,7 @@ public class UserWithLocationsDto
     [JsonPropertyName("updated_at")]
     public DateTime? UpdatedAt { get; set; }
 
-    // User'ning locationlari (array)
+    // User'ning locationlari (clustering qilingan, stopped_time bilan)
     [JsonPropertyName("locations")]
     public List<LocationResponseDto> Locations { get; set; } = new();
 }

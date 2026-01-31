@@ -19,15 +19,18 @@ public class LocationController : ControllerBase
     private readonly ILocationService _locationService;
     private readonly IUserService _userService;
     private readonly ILogger<LocationController> _logger;
+    private readonly Convoy.Service.Services.LocationClusteringService _clusteringService;
 
     public LocationController(
         ILocationService locationService,
         IUserService userService,
-        ILogger<LocationController> logger)
+        ILogger<LocationController> logger,
+        Convoy.Service.Services.LocationClusteringService clusteringService)
     {
         _locationService = locationService;
         _userService = userService;
         _logger = logger;
+        _clusteringService = clusteringService;
     }
 
     /// <summary>
@@ -531,6 +534,177 @@ public class LocationController : ControllerBase
 
         return StatusCode(result.StatusCode, apiResponse);
     }
+
+    /// <summary>
+    /// Clustered locationlarni olish - 10 metr oralig'dagi locationlarni groupalab beradi
+    /// POST /api/locations/user/{userId}/clustered
+    ///
+    /// Admin hodimlar uchun - locationlarni 10 metr oralig'ida gruppalaydi
+    /// Har bir group uchun stopped_time (o'sha joyda qancha vaqt turganini) hisoblab beradi
+    ///
+    /// BODY FORMAT:
+    /// {
+    ///   "date": "2026-01-30",
+    ///   "start_time": "09:00",
+    ///   "end_time": "18:00"
+    /// }
+    ///
+    /// RESPONSE FORMAT:
+    /// {
+    ///   "status": true,
+    ///   "message": "...",
+    ///   "data": [
+    ///     {
+    ///       "cluster_id": 1,
+    ///       "user_id": 123,
+    ///       "latitude": 41.2995,
+    ///       "longitude": 69.2401,
+    ///       "start_time": "2026-01-30T09:15:00",
+    ///       "end_time": "2026-01-30T09:45:00",
+    ///       "stopped_time": 30,  // daqiqa
+    ///       "location_count": 15,
+    ///       "locations": [...]  // optional
+    ///     }
+    ///   ]
+    /// }
+    /// </summary>
+    [HttpPost("user/{userId}/clustered")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ClusteredLocationDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetClusteredLocations(int userId, [FromBody] SingleUserLocationQueryDto query)
+    {
+        // Validation
+        if (!string.IsNullOrWhiteSpace(query.StartTime) && !IsValidTimeFormat(query.StartTime))
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "start_time noto'g'ri formatda. Format: HH:MM (masalan: 09:30)",
+                Data = null
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.EndTime) && !IsValidTimeFormat(query.EndTime))
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "end_time noto'g'ri formatda. Format: HH:MM (masalan: 17:30)",
+                Data = null
+            });
+        }
+
+        // Get locations
+        var result = await _locationService.GetSingleUserLocationsAsync(userId, query);
+
+        if (!result.Success || result.Data == null || !result.Data.Any())
+        {
+            return StatusCode(result.StatusCode, new ApiResponse<object>
+            {
+                Status = false,
+                Message = result.Message ?? "Locationlar topilmadi",
+                Data = null
+            });
+        }
+
+        // Apply clustering
+        var clusteredLocations = _clusteringService.ClusterLocations(result.Data.ToList(), userId);
+
+        var apiResponse = new ApiResponse<IEnumerable<ClusteredLocationDto>>
+        {
+            Status = true,
+            Message = $"{clusteredLocations.Count} ta cluster topildi ({result.Data.Count()} location'dan)",
+            Data = clusteredLocations
+        };
+
+        return Ok(apiResponse);
+    }
+
+    /// <summary>
+    /// Locationlarni stopped_time bilan olish (clustering'siz)
+    /// POST /api/locations/user/{userId}/with_stopped_time
+    ///
+    /// Har bir location uchun stopped_time hisoblab beradi
+    /// Agar ketma-ket locationlar 10 metr ichida bo'lsa, stopped_time oshadi
+    ///
+    /// BODY FORMAT:
+    /// {
+    ///   "date": "2026-01-30",
+    ///   "start_time": "09:00",
+    ///   "end_time": "18:00"
+    /// }
+    ///
+    /// RESPONSE FORMAT:
+    /// {
+    ///   "status": true,
+    ///   "message": "...",
+    ///   "data": [
+    ///     {
+    ///       "id": 1,
+    ///       "user_id": 123,
+    ///       "latitude": 41.2995,
+    ///       "longitude": 69.2401,
+    ///       "recorded_at": "2026-01-30T09:15:00",
+    ///       "stopped_time": 15,  // daqiqa - o'sha joyda turgan vaqt
+    ///       ...
+    ///     }
+    ///   ]
+    /// }
+    /// </summary>
+    [HttpPost("user/{userId}/with_stopped_time")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<LocationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetLocationsWithStoppedTime(int userId, [FromBody] SingleUserLocationQueryDto query)
+    {
+        // Validation
+        if (!string.IsNullOrWhiteSpace(query.StartTime) && !IsValidTimeFormat(query.StartTime))
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "start_time noto'g'ri formatda. Format: HH:MM (masalan: 09:30)",
+                Data = null
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.EndTime) && !IsValidTimeFormat(query.EndTime))
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "end_time noto'g'ri formatda. Format: HH:MM (masalan: 17:30)",
+                Data = null
+            });
+        }
+
+        // Get locations
+        var result = await _locationService.GetSingleUserLocationsAsync(userId, query);
+
+        if (!result.Success || result.Data == null)
+        {
+            return StatusCode(result.StatusCode, new ApiResponse<object>
+            {
+                Status = false,
+                Message = result.Message ?? "Locationlar topilmadi",
+                Data = null
+            });
+        }
+
+        // Calculate stopped time
+        var locationsWithStoppedTime = _clusteringService.CalculateStoppedTime(result.Data.ToList());
+
+        var apiResponse = new ApiResponse<IEnumerable<LocationResponseDto>>
+        {
+            Status = true,
+            Message = $"{locationsWithStoppedTime.Count} ta location topildi (stopped_time hisoblab)",
+            Data = locationsWithStoppedTime
+        };
+
+        return Ok(apiResponse);
+    }
+
     public class filter
     {
         [JsonPropertyName("date_time")]

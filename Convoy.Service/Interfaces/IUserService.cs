@@ -25,6 +25,12 @@ public interface IUserService
     Task<Domain.Entities.User?> GetByUserIdAsync(int userId);
 
     /// <summary>
+    /// PHP API worker_id (user_id) bo'yicha user DTO'sini olish
+    /// Multiple users locations uchun kerak
+    /// </summary>
+    Task<UserResponseDto?> GetByUserIdDtoAsync(int userId);
+
+    /// <summary>
     /// User entity yaratish (AuthService'dan kerak)
     /// </summary>
     Task CreateAsync(Domain.Entities.User user);

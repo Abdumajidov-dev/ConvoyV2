@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Convoy.Domain.Entities;
 
+[Table("device_tokens")]
 public class DeviceToken : Auditable
 {
     [Column("user_id")]
