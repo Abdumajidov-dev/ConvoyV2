@@ -107,17 +107,43 @@ public static class DateTimeExtensions
     /// <summary>
     /// Kun boshi (00:00:00) va oxiri (23:59:59) uchun DateTime range yaratish
     /// Database query'larda ishlatiladi
+    /// FIXED: Application timezone'da kun boshi va oxirini hisoblash
     /// </summary>
-    /// <param name="date">Kun sanasi (UTC sifatida qabul qilinadi)</param>
+    /// <param name="date">Kun sanasi</param>
     /// <returns>Tuple: (startDate UTC, endDate UTC)</returns>
     public static (DateTime startDate, DateTime endDate) ToDateRange(this DateTime date)
     {
-        // Faqat kun qismini olish va UTC sifatida belgilash
-        var dateOnly = date.Date;
+        // Application timezone'da kun boshi va oxiri yaratish
+        // Masalan: "2026-02-02" → 2026-02-02 00:00:00 +05:00 → 2026-02-01 19:00:00 UTC
+        //                         2026-02-03 00:00:00 +05:00 → 2026-02-02 19:00:00 UTC
 
-        // UTC'da kun boshi va oxiri (timezone konvertatsiya qilmasdan)
-        var startDate = DateTime.SpecifyKind(dateOnly, DateTimeKind.Utc);
-        var endDate = DateTime.SpecifyKind(dateOnly.AddDays(1), DateTimeKind.Utc);
+        // 1. Date qismini olish (timezone ignore qilmasdan)
+        DateTime localDate;
+
+        if (date.Kind == DateTimeKind.Utc)
+        {
+            // UTC'dan application timezone'ga o'tkazib, date qismini olish
+            localDate = TimeZoneInfo.ConvertTimeFromUtc(date, ApplicationTimeZone).Date;
+        }
+        else if (date.Kind == DateTimeKind.Local)
+        {
+            // Local'dan application timezone'ga o'tkazib, date qismini olish
+            var utc = date.ToUniversalTime();
+            localDate = TimeZoneInfo.ConvertTimeFromUtc(utc, ApplicationTimeZone).Date;
+        }
+        else
+        {
+            // Unspecified - application timezone'da deb hisoblaymiz
+            localDate = date.Date;
+        }
+
+        // 2. Application timezone'da kun boshi va oxiri
+        var startDateLocal = new DateTime(localDate.Year, localDate.Month, localDate.Day, 0, 0, 0, DateTimeKind.Unspecified);
+        var endDateLocal = startDateLocal.AddDays(1);
+
+        // 3. UTC'ga o'tkazish
+        var startDate = TimeZoneInfo.ConvertTimeToUtc(startDateLocal, ApplicationTimeZone);
+        var endDate = TimeZoneInfo.ConvertTimeToUtc(endDateLocal, ApplicationTimeZone);
 
         return (startDate, endDate);
     }
