@@ -92,6 +92,10 @@ WORKDIR /app
 # Copy published output
 COPY --from=publish /app/publish .
 
+# Copy Firebase credentials (optional - agar yo'q bo'lsa skip qiladi)
+# Railway deployment'da FIREBASE_CREDENTIALS_PATH environment variable ishlatiladi
+COPY firebase-adminsdk.json* ./ || true
+
 # Install strings utility for verification
 RUN apt-get update && apt-get install -y binutils && rm -rf /var/lib/apt/lists/*
 

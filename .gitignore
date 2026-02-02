@@ -77,4 +77,6 @@ packages/
 
 # Firebase credentials (SECRET - never commit!)
 firebase-credentials.json
+firebase-adminsdk.json
+firebase-base64.txt
 **/firebase-*.json
