@@ -71,7 +71,9 @@
       "Bash(cmd.exe /c \"findstr /c:\"\"2026-01\"\" Global_locations | findstr /c:\"\"5277\"\" | head -n 1\")",
       "Bash(cmd.exe /c \"set PGPASSWORD=GarantDockerPass&& psql -h 10.21.61.51 -p 5432 -U postgres -d convoydb -c \"\"SELECT DATE(recorded_at) as date, COUNT(*) as count FROM locations WHERE user_id IN (5277, 5475) GROUP BY DATE(recorded_at) ORDER BY date DESC LIMIT 10;\"\"\")",
       "Bash(cmd.exe /c \"dir /b *.log 2>nul | head -n 5\")",
-      "Bash(cmd.exe /c \"set PGPASSWORD=GarantDockerPass&& psql -h 10.21.61.51 -p 5432 -U postgres -d convoydb -c \"\"\\d device_tokens\"\"\")"
+      "Bash(cmd.exe /c \"set PGPASSWORD=GarantDockerPass&& psql -h 10.21.61.51 -p 5432 -U postgres -d convoydb -c \"\"\\d device_tokens\"\"\")",
+      "Bash(powershell -Command \"Stop-Process -Id 2416 -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; dotnet build C:\\Users\\abdum\\source\\repos\\ConvoyV2\\Convoy.Api\\Convoy.Api.csproj\")",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []

@@ -102,7 +102,7 @@ public class LocationClusteringService
         {
             if (i == 0)
             {
-                sortedLocations[i].StoppedTime = "00:00";
+                sortedLocations[i].StoppedTime = null; // Birinchi location uchun null
                 continue;
             }
 
@@ -133,14 +133,23 @@ public class LocationClusteringService
 
                 var stoppedMinutes = (int)(current.RecordedAt - previous.RecordedAt).TotalMinutes;
                 var totalMinutes = previousMinutes + stoppedMinutes;
-                var h = totalMinutes / 60;
-                var m = totalMinutes % 60;
-                current.StoppedTime = $"{h:D2}:{m:D2}";
+
+                // Agar total 0 bo'lsa - null, aks holda format qilish
+                if (totalMinutes == 0)
+                {
+                    current.StoppedTime = null;
+                }
+                else
+                {
+                    var h = totalMinutes / 60;
+                    var m = totalMinutes % 60;
+                    current.StoppedTime = $"{h:D2}:{m:D2}";
+                }
             }
             else
             {
-                // Yangi joyga o'tdi - stopped time 0 dan boshlanadi
-                current.StoppedTime = "00:00";
+                // Yangi joyga o'tdi - stopped time null
+                current.StoppedTime = null;
             }
         }
 
@@ -234,7 +243,8 @@ public class LocationClusteringService
             LocationResponseDto? closestLocation = null;
             double minDistance = double.MaxValue;
 
-            foreach (var location in locations.Where(l => l.RecordedAt >= cluster.StartTime && l.RecordedAt <= cluster.EndTime))
+            // FIXED: cluster.Locations ichidan qidirish kerak (butun locations list'idan emas!)
+            foreach (var location in cluster.Locations)
             {
                 var distance = CalculateDistance(
                     (double)clusterCenter.Latitude,
@@ -253,9 +263,17 @@ public class LocationClusteringService
             if (closestLocation != null)
             {
                 // Stopped time qo'shish (daqiqalarni HH:mm formatga o'tkazish)
-                var hours = cluster.StoppedTime / 60;
-                var minutes = cluster.StoppedTime % 60;
-                closestLocation.StoppedTime = $"{hours:D2}:{minutes:D2}";
+                // Agar 00:00 bo'lsa - null yuborish
+                if (cluster.StoppedTime == 0)
+                {
+                    closestLocation.StoppedTime = null;
+                }
+                else
+                {
+                    var hours = cluster.StoppedTime / 60;
+                    var minutes = cluster.StoppedTime % 60;
+                    closestLocation.StoppedTime = $"{hours:D2}:{minutes:D2}";
+                }
                 filteredLocations.Add(closestLocation);
             }
         }

@@ -21,7 +21,7 @@ public class CheckLocationCreatedBackrounService : BackgroundService
     private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1); // Har 1 minutda tekshirish
 
     // Offline duration thresholds (daqiqalarda)
-    private readonly int[] _notificationThresholds = { 20, 40, 60, 80, 100, 120 }; // 20min, 40min, 1h, 1h20min, 1h40min, 2h
+    private readonly int[] _notificationThresholds = { 2, 4, 60, 80, 100, 120 }; // 20min, 40min, 1h, 1h20min, 1h40min, 2h
 
     public CheckLocationCreatedBackrounService(
         ILogger<CheckLocationCreatedBackrounService> logger,
@@ -124,7 +124,23 @@ public class CheckLocationCreatedBackrounService : BackgroundService
             }
 
             // Offline duration (daqiqalarda)
-            var offlineDuration = (DateTime.UtcNow - lastLocationTime.Value).TotalMinutes;
+            // FIXED: RecordedAt UTC formatda bo'lishi kerak, lekin agar kelajakdagi vaqt bo'lsa - manfiy bo'ladi
+            // Shuning uchun hozirgi vaqtni ham UTC'ga o'tkazamiz va manfiy qiymatni 0 ga o'rnatamiz
+            var currentTime = DateTime.UtcNow;
+            var lastTime = lastLocationTime.Value.Kind == DateTimeKind.Utc
+                ? lastLocationTime.Value
+                : DateTime.SpecifyKind(lastLocationTime.Value, DateTimeKind.Utc);
+
+            var offlineDuration = (currentTime - lastTime).TotalMinutes;
+
+            // Agar manfiy bo'lsa (kelajakdagi vaqt), 0 deb hisoblaymiz
+            if (offlineDuration < 0)
+            {
+                _logger.LogWarning("User {UserId} ({UserName}) uchun lastLocationTime kelajakda: {LastTime}, CurrentTime: {CurrentTime}. Manfiy qiymat: {Offline}min",
+                    userId, userName, lastTime, currentTime, offlineDuration);
+                offlineDuration = 0;
+            }
+
             var offlineDurationInt = (int)Math.Floor(offlineDuration);
 
             // User status report'ni olish yoki yaratish
@@ -155,7 +171,7 @@ public class CheckLocationCreatedBackrounService : BackgroundService
             await context.SaveChangesAsync(stoppingToken);
 
             // Notification yuborish kerakligini aniqlash
-            if (offlineDurationInt >= 20) // Minimum 20 minut offline
+            if (offlineDurationInt >= 2) // Minimum 20 minut offline
             {
                 await SendNotificationIfNeededAsync(
                     userId,

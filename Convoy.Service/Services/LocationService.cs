@@ -53,6 +53,10 @@ public class LocationService : ILocationService
                 throw new CustomException(400, "recorded vaqtini berish majburish");
             }
 
+            // FIXED: RecordedAt ni to'g'ri UTC'ga konvertatsiya qilish
+            // Flutter client local vaqt (UTC+5) yuboradi, biz uni UTC'ga o'tkazamiz
+            var recordedAtUtc = locationData.RecordedAt.Value.ToApplicationTime();
+
             // User'ning oldingi location'ini olish (distance hisoblash uchun)
             var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
             var previousLocation = lastLocations.FirstOrDefault();
@@ -84,7 +88,7 @@ public class LocationService : ILocationService
             var location = new Location
             {
                 UserId = userId,
-                RecordedAt = locationData.RecordedAt.Value,
+                RecordedAt = recordedAtUtc,
 
                 // Core location properties (REQUIRED)
                 Latitude = locationData.Latitude,
@@ -607,8 +611,8 @@ public class LocationService : ILocationService
     {
         try
         {
-            // RecordedAt bo'lmasa - hozirgi vaqtni set qilish
-           
+            // FIXED: RecordedAt ni to'g'ri UTC'ga konvertatsiya qilish
+            var recordedAtUtc = locationData.RecordedAt.ToApplicationTime();
 
             // User'ning oldingi location'ini olish (distance hisoblash uchun)
             var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
@@ -633,7 +637,7 @@ public class LocationService : ILocationService
             var location = new Location
             {
                 UserId = userId,
-                RecordedAt = locationData.RecordedAt,
+                RecordedAt = recordedAtUtc,
 
                 // Core location properties (REQUIRED)
                 Latitude = locationData.Latitude,
