@@ -111,9 +111,9 @@ public class NotificationService : INotificationService
         {
             // Barcha admin_unduruv role'ga ega user'larni olish
             var adminUsers = await _context.Users
-                .Where(u =>  u.IsActive)
+                .Where(u => u.Role == "admin_unduruv" && u.IsActive)
                 .ToListAsync();
-            //u.Role == "admin_unduruv" &&
+            //
 
             if (adminUsers.Count == 0)
             {

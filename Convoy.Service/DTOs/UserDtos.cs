@@ -141,6 +141,9 @@ public class UserWithLocationsDto
     [JsonPropertyName("id")]
     public long Id { get; set; }
 
+    [JsonPropertyName("user_id")]
+    public int UserId { get; set; }
+
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 

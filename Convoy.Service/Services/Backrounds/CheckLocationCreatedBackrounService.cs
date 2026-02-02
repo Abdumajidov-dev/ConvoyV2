@@ -21,7 +21,7 @@ public class CheckLocationCreatedBackrounService : BackgroundService
     private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1); // Har 1 minutda tekshirish
 
     // Offline duration thresholds (daqiqalarda)
-    private readonly int[] _notificationThresholds = { 2, 4, 60, 80, 100, 120 }; // 20min, 40min, 1h, 1h20min, 1h40min, 2h
+    private readonly int[] _notificationThresholds = { 20, 40, 60, 80, 100, 120 }; // 20min, 40min, 1h, 1h20min, 1h40min, 2h
 
     public CheckLocationCreatedBackrounService(
         ILogger<CheckLocationCreatedBackrounService> logger,
@@ -171,7 +171,7 @@ public class CheckLocationCreatedBackrounService : BackgroundService
             await context.SaveChangesAsync(stoppingToken);
 
             // Notification yuborish kerakligini aniqlash
-            if (offlineDurationInt >= 2) // Minimum 20 minut offline
+            if (offlineDurationInt >= 20) // Minimum 20 minut offline
             {
                 await SendNotificationIfNeededAsync(
                     userId,

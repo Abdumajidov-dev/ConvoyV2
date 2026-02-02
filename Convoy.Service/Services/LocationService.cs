@@ -561,6 +561,7 @@ public class LocationService : ILocationService
                 var userWithLocations = new UserWithLocationsDto
                 {
                     Id = user.Id,
+                    UserId = user.UserId,  // ADDED: user_id field
                     Name = user.Name,
                     Phone = user.Phone,
                     BranchGuid = user.BranchGuid,
