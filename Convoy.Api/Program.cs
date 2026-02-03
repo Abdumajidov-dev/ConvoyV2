@@ -198,6 +198,14 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Initialize Firebase on startup (DirectFirebaseService Singleton)
+// This ensures Firebase is initialized before any requests
+using (var scope = app.Services.CreateScope())
+{
+    var firebaseService = scope.ServiceProvider.GetRequiredService<Convoy.Service.Services.FireBaseService.DirectFirebaseService>();
+    Console.WriteLine("DirectFirebaseService initialized at startup");
+}
+
 // Configure the HTTP request pipeline.
 // Enable Swagger in all environments for Railway deployment
 app.UseSwagger();
