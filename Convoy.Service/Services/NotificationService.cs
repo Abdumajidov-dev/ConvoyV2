@@ -83,6 +83,15 @@ public class NotificationService : INotificationService
     {
         try
         {
+            // Firebase initialized emasligini tekshirish
+            if (FirebaseApp.DefaultInstance == null)
+            {
+                _logger.LogWarning("⚠️ Firebase Admin SDK initialized emas. Notification yuborilmaydi.");
+                _logger.LogWarning("To enable notifications, set FIREBASE_CREDENTIALS_BASE64 environment variable");
+                _logger.LogWarning("See FIREBASE_DEPLOYMENT.md for complete instructions");
+                return false;
+            }
+
             // Admin'ning device token'larini olish
             var deviceTokens = await _deviceTokenService.GetActiveTokensBySupportIdAsync(adminUserId);
 
