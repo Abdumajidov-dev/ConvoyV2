@@ -104,6 +104,7 @@ builder.Services.AddScoped<IPhpTokenService, PhpTokenService>(); // JWT token de
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 builder.Services.AddScoped<IDeviceTokenService, Convoy.Service.Services.DeviceTokens.DeviceTokenService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddSingleton<Convoy.Service.Services.FireBaseService.DirectFirebaseService>(); // Firebase initialization (Singleton)
 builder.Services.AddScoped<LocationClusteringService>(); // Location clustering service
 
 // AutoMapper

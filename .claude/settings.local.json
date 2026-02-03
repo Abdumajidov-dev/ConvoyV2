@@ -77,7 +77,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(docker build:*)"
+      "Bash(docker build:*)",
+      "Bash(docker:*)",
+      "Bash(timeout /t 30 /nobreak)",
+      "Bash(cmd.exe /c \"timeout /t 30 /nobreak\")",
+      "Bash(cmd.exe /c \"findstr /n /i /c:DirectFirebaseService /c:NotificationService Convoy.Api\\Program.cs\")",
+      "Bash(cmd.exe /c \"findstr /n /i DirectFirebaseService Convoy.Api\\Program.cs\")"
     ],
     "deny": [],
     "ask": []

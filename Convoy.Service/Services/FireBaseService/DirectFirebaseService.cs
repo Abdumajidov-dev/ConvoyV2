@@ -32,31 +32,62 @@ public class DirectFirebaseService
             // Agar Firebase allaqachon initialized bo'lsa, qaytish
             if (FirebaseApp.DefaultInstance != null)
             {
+                Console.WriteLine("✅ Firebase already initialized");
                 return;
             }
 
-            // firebase.json faylini topish
-            string firebaseJsonPath = GetFirebaseJsonPath();
+            Console.WriteLine("🔍 Attempting Firebase Admin SDK initialization...");
 
-            if (!File.Exists(firebaseJsonPath))
+            GoogleCredential credential;
+
+            // PRIORITY 1: Environment variable orqali Base64 encoded credentials
+            var base64Credentials = Environment.GetEnvironmentVariable("FIREBASE_CREDENTIALS_BASE64");
+            if (!string.IsNullOrWhiteSpace(base64Credentials))
             {
-                throw new FileNotFoundException($"Firebase configuration file not found at: {firebaseJsonPath}");
+                Console.WriteLine("Loading Firebase credentials from FIREBASE_CREDENTIALS_BASE64 environment variable");
+
+                // Base64'dan decode qilish
+                var jsonBytes = Convert.FromBase64String(base64Credentials);
+
+                // JSON string'dan credential yaratish
+                using var stream = new MemoryStream(jsonBytes);
+                credential = GoogleCredential.FromStream(stream);
+
+                FirebaseApp.Create(new AppOptions { Credential = credential });
+                Console.WriteLine("✅ Firebase Admin SDK initialized from Base64 environment variable");
+                return;
             }
 
-            // GoogleCredential yaratish
-            var credential = GoogleCredential.FromFile(firebaseJsonPath);
+            // PRIORITY 2: firebase.json faylini topish
+            string firebaseJsonPath = GetFirebaseJsonPath();
+            Console.WriteLine($"Checking Firebase file: {firebaseJsonPath}");
 
-            // Firebase App yaratish
-            FirebaseApp.Create(new AppOptions()
+            if (File.Exists(firebaseJsonPath))
             {
-                Credential = credential
-            });
+                Console.WriteLine($"Loading Firebase credentials from file: {firebaseJsonPath}");
 
-            Console.WriteLine("Firebase successfully initialized from file: " + firebaseJsonPath);
+                // Stream orqali o'qish
+                using var fileStream = File.OpenRead(firebaseJsonPath);
+                credential = GoogleCredential.FromStream(fileStream);
+
+                // Firebase App yaratish
+                FirebaseApp.Create(new AppOptions { Credential = credential });
+
+                Console.WriteLine("✅ Firebase successfully initialized from file: " + firebaseJsonPath);
+                return;
+            }
+
+            // PRIORITY 3: Credentials topilmadi - warning
+            Console.WriteLine("⚠️ Firebase credentials not found. Checked:");
+            Console.WriteLine("  1. FIREBASE_CREDENTIALS_BASE64 environment variable (not set)");
+            Console.WriteLine($"  2. File path: {firebaseJsonPath} (not found)");
+            Console.WriteLine("Firebase notifications are DISABLED. API will continue without push notifications.");
+            Console.WriteLine("See FIREBASE_DEPLOYMENT.md for deployment instructions.");
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Failed to initialize Firebase: {ex.Message}", ex);
+            Console.WriteLine($"❌ Firebase initialization failed: {ex.Message}");
+            Console.WriteLine("Firebase notifications are DISABLED due to initialization error.");
         }
     }
 
@@ -73,10 +104,20 @@ public class DirectFirebaseService
         // 2. Content root dan qidirish
         var contentRoot = _environment.ContentRootPath;
 
+        // firebase-adminsdk.json (priority - matches Git repository)
+        var adminsdk = Path.Combine(contentRoot, "firebase-adminsdk.json");
+        if (File.Exists(adminsdk))
+            return adminsdk;
+
         // firebase.json (root da)
         var rootPath = Path.Combine(contentRoot, "firebase.json");
         if (File.Exists(rootPath))
             return rootPath;
+
+        // firebase-credentials.json (alternative name)
+        var credentials = Path.Combine(contentRoot, "firebase-credentials.json");
+        if (File.Exists(credentials))
+            return credentials;
 
         // Configs papkasida qidirish
         var configFolderPath = Path.Combine(contentRoot, "Configs", "firebase.json");
@@ -93,7 +134,7 @@ public class DirectFirebaseService
             return nearAppSettingsPath;
 
         // 3. Default path
-        return Path.Combine(contentRoot, "firebase.json");
+        return Path.Combine(contentRoot, "firebase-adminsdk.json");
     }
 
     /// <summary>
