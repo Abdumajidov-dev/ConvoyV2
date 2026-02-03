@@ -32,21 +32,22 @@ public class NotificationService : INotificationService
         {
             try
             {
-                GoogleCredential credential;
+                _logger.LogInformation("🔍 Attempting Firebase Admin SDK initialization...");
 
                 // PRIORITY 1: Environment variable orqali Base64 encoded credentials
                 var base64Credentials = Environment.GetEnvironmentVariable("FIREBASE_CREDENTIALS_BASE64");
+                _logger.LogInformation("Checking FIREBASE_CREDENTIALS_BASE64: {Found}", !string.IsNullOrWhiteSpace(base64Credentials));
+
                 if (!string.IsNullOrWhiteSpace(base64Credentials))
                 {
                     _logger.LogInformation("Loading Firebase credentials from FIREBASE_CREDENTIALS_BASE64 environment variable");
 
                     // Base64'dan decode qilish
                     var jsonBytes = Convert.FromBase64String(base64Credentials);
-                    var jsonString = System.Text.Encoding.UTF8.GetString(jsonBytes);
 
                     // JSON string'dan credential yaratish
                     using var stream = new MemoryStream(jsonBytes);
-                    credential = GoogleCredential.FromStream(stream);
+                    var credential = GoogleCredential.FromStream(stream);
 
                     FirebaseApp.Create(new AppOptions { Credential = credential });
                     _logger.LogInformation("✅ Firebase Admin SDK initialized from Base64 environment variable");
@@ -55,11 +56,16 @@ public class NotificationService : INotificationService
 
                 // PRIORITY 2: File path orqali (local development)
                 var credentialsPath = Environment.GetEnvironmentVariable("FIREBASE_CREDENTIALS_PATH") ?? "firebase-adminsdk.json";
+                var fileExists = File.Exists(credentialsPath);
+                _logger.LogInformation("Checking file: {Path}, Exists: {Exists}", credentialsPath, fileExists);
 
-                if (File.Exists(credentialsPath))
+                if (fileExists)
                 {
                     _logger.LogInformation("Loading Firebase credentials from file: {Path}", credentialsPath);
-                    credential = GoogleCredential.FromFile(credentialsPath);
+
+                    // Stream orqali o'qish (FromFile o'rniga)
+                    using var fileStream = File.OpenRead(credentialsPath);
+                    var credential = GoogleCredential.FromStream(fileStream);
 
                     FirebaseApp.Create(new AppOptions { Credential = credential });
                     _logger.LogInformation("✅ Firebase Admin SDK initialized from file: {Path}", credentialsPath);
@@ -68,14 +74,20 @@ public class NotificationService : INotificationService
 
                 // PRIORITY 3: Credentials topilmadi - notification disabled
                 _logger.LogWarning("⚠️ Firebase credentials not found. Checked:");
-                _logger.LogWarning("  1. FIREBASE_CREDENTIALS_BASE64 environment variable (not set)");
-                _logger.LogWarning("  2. File path: {Path} (not found)", credentialsPath);
+                _logger.LogWarning("  1. FIREBASE_CREDENTIALS_BASE64 environment variable: {Found}", !string.IsNullOrWhiteSpace(base64Credentials) ? "SET (but empty/whitespace)" : "NOT SET");
+                _logger.LogWarning("  2. File path: {Path} - {Status}", credentialsPath, fileExists ? "EXISTS (but failed to load)" : "NOT FOUND");
                 _logger.LogWarning("Firebase notifications are DISABLED. API will continue without push notifications.");
+                _logger.LogWarning("See FIREBASE_DEPLOYMENT.md for deployment instructions.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Firebase Admin SDK initialization failed");
+                _logger.LogWarning("Firebase notifications are DISABLED due to initialization error.");
             }
+        }
+        else
+        {
+            _logger.LogInformation("Firebase Admin SDK already initialized");
         }
     }
 
