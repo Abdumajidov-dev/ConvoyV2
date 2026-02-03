@@ -17,28 +17,11 @@ using Google.Apis.Auth.OAuth2;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Firebase initialization - device token push notifications uchun
-try
-{
-    var firebaseCredentialsPath = Path.Combine(AppContext.BaseDirectory, "firebase-credentials.json");
-    if (File.Exists(firebaseCredentialsPath))
-    {
-        FirebaseApp.Create(new AppOptions
-        {
-            Credential = GoogleCredential.FromFile(firebaseCredentialsPath)
-        });
-        Console.WriteLine("✅ Firebase initialized successfully");
-    }
-    else
-    {
-        Console.WriteLine("⚠️ Firebase credentials file not found. Push notifications will not work.");
-    }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"❌ Firebase initialization failed: {ex.Message}");
-}
-
+// Firebase initialization REMOVED - handled by NotificationService constructor
+// NotificationService automatically loads credentials from:
+//   1. FIREBASE_CREDENTIALS_BASE64 environment variable (production)
+//   2. firebase-adminsdk.json file (local development)
+// See FIREBASE_DEPLOYMENT.md for setup instructions
 
 // PostgreSQL connection string - support both Railway DATABASE_URL and custom ConnectionStrings
 // Priority: ConnectionStrings__DefaultConnection > DATABASE_URL > appsettings.json
