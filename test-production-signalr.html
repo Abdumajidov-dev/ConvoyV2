@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Production SignalR</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+    <h1>SignalR Production Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://location-undiruv.garant.uz/hubs/location")
+            .withAutomaticReconnect()
+            .build();
+
+        // Connection events
+        connection.onreconnecting(error => {
+            document.getElementById("status").innerHTML = "🟡 Reconnecting...";
+            console.log("Reconnecting:", error);
+        });
+
+        connection.onreconnected(connectionId => {
+            document.getElementById("status").innerHTML = "🟢 Reconnected!";
+            console.log("Reconnected:", connectionId);
+        });
+
+        connection.onclose(error => {
+            document.getElementById("status").innerHTML = "🔴 Disconnected";
+            console.log("Connection closed:", error);
+        });
+
+        // Listen for LocationUpdated events
+        connection.on("LocationUpdated", (data) => {
+            const messagesDiv = document.getElementById("messages");
+            messagesDiv.innerHTML += `<p>📍 Location Update: ${JSON.stringify(data)}</p>`;
+            console.log("LocationUpdated:", data);
+        });
+
+        // Start connection
+        connection.start()
+            .then(() => {
+                document.getElementById("status").innerHTML = "🟢 Connected!";
+                console.log("✅ SignalR Connected to Production!");
+
+                // Register user (test with userId = 5475)
+                return connection.invoke("RegisterUser", 5475);
+            })
+            .then(() => {
+                console.log("✅ User registered successfully");
+                document.getElementById("messages").innerHTML += "<p>✅ User 5475 registered</p>";
+            })
+            .catch(err => {
+                document.getElementById("status").innerHTML = "❌ Connection Failed";
+                console.error("❌ SignalR Connection Error:", err);
+                document.getElementById("messages").innerHTML += `<p>❌ Error: ${err}</p>`;
+            });
+    </script>
+</body>
+</html>
