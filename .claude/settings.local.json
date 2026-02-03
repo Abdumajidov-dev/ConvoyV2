@@ -74,7 +74,10 @@
       "Bash(cmd.exe /c \"set PGPASSWORD=GarantDockerPass&& psql -h 10.21.61.51 -p 5432 -U postgres -d convoydb -c \"\"\\d device_tokens\"\"\")",
       "Bash(powershell -Command \"Stop-Process -Id 2416 -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; dotnet build C:\\Users\\abdum\\source\\repos\\ConvoyV2\\Convoy.Api\\Convoy.Api.csproj\")",
       "Bash(powershell -Command:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(docker build:*)"
     ],
     "deny": [],
     "ask": []
