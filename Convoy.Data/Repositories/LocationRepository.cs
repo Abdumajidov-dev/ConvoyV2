@@ -323,7 +323,8 @@ public class LocationRepository : ILocationRepository
     /// </summary>
     public async Task<string> CreatePartitionAsync(DateTime targetMonth)
     {
-        const string sql = "SELECT create_location_partition(@TargetMonth)";
+        // IMPORTANT: Cast to DATE type because PostgreSQL function expects DATE, not TIMESTAMP
+        const string sql = "SELECT create_location_partition(@TargetMonth::DATE)";
 
         try
         {

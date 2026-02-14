@@ -87,13 +87,14 @@ builder.Services.AddHttpClient<ITelegramService, TelegramService>();
 // Services
 builder.Services.AddScoped<ILocationService>(sp =>
 {
+    var userRepo = sp.GetRequiredService<IRepository<Convoy.Domain.Entities.User>>();
     var locationRepo = sp.GetRequiredService<ILocationRepository>();
     var mapper = sp.GetRequiredService<AutoMapper.IMapper>();
     var logger = sp.GetRequiredService<ILogger<LocationService>>();
     var clusteringService = sp.GetRequiredService<LocationClusteringService>();
     var hubContext = sp.GetService<IHubContext<Convoy.Api.Hubs.LocationHub>>();
     var telegramService = sp.GetService<ITelegramService>();
-    return new LocationService(locationRepo, mapper, logger, clusteringService, hubContext, telegramService);
+    return new LocationService(userRepo, locationRepo, mapper, logger, clusteringService, hubContext, telegramService);
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -106,6 +107,7 @@ builder.Services.AddScoped<IDeviceTokenService, Convoy.Service.Services.DeviceTo
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<Convoy.Service.Services.FireBaseService.DirectFirebaseService>(); // Firebase initialization (Singleton)
 builder.Services.AddScoped<LocationClusteringService>(); // Location clustering service
+builder.Services.AddScoped<IUserStoppedReportService, UserStoppedReportService>(); // User stopped report service
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));

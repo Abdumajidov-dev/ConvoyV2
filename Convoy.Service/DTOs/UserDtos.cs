@@ -93,11 +93,48 @@ public class UserQueryDto
     [JsonPropertyName("search_term")]
     public string? SearchTerm { get; set; }
 
+    /// <summary>
+    /// User aktiv yoki emas: "true" = aktiv, "false" = noaktiv, null = barcha
+    /// </summary>
     [JsonPropertyName("is_active")]
-    public bool? IsActive { get; set; }
+    public string? IsActive { get; set; }
 
     [JsonPropertyName("branch_guid")]
     public string? BranchGuid { get; set; }
+
+    /// <summary>
+    /// User to'xtab turgan yoki yo'q: "true" = to'xtaganlar, "false" = harakat qilayotganlar, null = barcha
+    /// </summary>
+    [JsonPropertyName("is_stopped")]
+    public string? IsStopped { get; set; }
+
+    /// <summary>
+    /// Qaysi sana bo'yicha tekshirish (default: bugun)
+    /// Format: "2026-02-11" yoki "2026-02-11 15:30:00"
+    /// </summary>
+    [JsonPropertyName("date")]
+    public string? Date { get; set; }
+
+    /// <summary>
+    /// Soat oralig'i boshlanishi (masalan: "09:00")
+    /// Null bo'lsa soatga qaramaydi
+    /// </summary>
+    [JsonPropertyName("start_hour")]
+    public string? StartHour { get; set; }
+
+    /// <summary>
+    /// Soat oralig'i tugashi (masalan: "18:00")
+    /// Null bo'lsa soatga qaramaydi
+    /// </summary>
+    [JsonPropertyName("end_hour")]
+    public string? EndHour { get; set; }
+
+    /// <summary>
+    /// Kamida necha daqiqa to'xtab turgan (default: 60 daqiqa = 1 soat)
+    /// Null bo'lsa majburiy emas
+    /// </summary>
+    [JsonPropertyName("min_stopped_minutes")]
+    public int? MinStoppedMinutes { get; set; }
 
     [JsonPropertyName("page")]
     public int Page { get; set; } = 1;

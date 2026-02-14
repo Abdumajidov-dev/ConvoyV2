@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  api:
+    image: jm7uz/convoy:latest
+    container_name: convoyapi
+    ports:
+      - "3908:8080"
+    environment:
+      # ASP.NET Core environment
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+
+      # Database connection
+      ConnectionStrings__DefaultConnection: "Host=172.17.0.1;Port=5432;Database=convoydb;Username=postgres;Password=GarantDockerPass;Minimum Pool Size=10;Maximum Pool Size=50;Connection Idle Lifetime=60;Command Timeout=120;Pooling=true;"
+
+      # Firebase credentials (base64 encoded JSON file)
+      # Generate: cat firebase-adminsdk.json | base64 -w 0
+      FIREBASE_CREDENTIALS_BASE64: "ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAieW91ci1maXJlYmFzZS1wcm9qZWN0LWlkIiwKICAicHJpdmF0ZV9rZXlfaWQiOiAieW91ci1rZXktaWQiLAogICJwcml2YXRlX2tleSI6ICItLS0tLUJFR0lOIFBSSVZBVEUgS0VZLS0tLS1cbi4uLlxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwKICAiY2xpZW50X2VtYWlsIjogImZpcmViYXNlLWFkbWluc2RrQHlvdXItcHJvamVjdC5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsCiAgImNsaWVudF9pZCI6ICJ5b3VyLWNsaWVudC1pZCIsCiAgImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKICAidG9rZW5fdXJpIjogImh0dHBzOi8vb2F1dGgyLmdvb2dsZWFwaXMuY29tL3Rva2VuIiwKICAiYXV0aF9wcm92aWRlcl94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsCiAgImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvZmlyZWJhc2UtYWRtaW5zZGslNDB5b3VyLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAogICJ1bml2ZXJzZV9kb21haW4iOiAiZ29vZ2xlYXBpcy5jb20iCn0K"
+
+      # JWT settings (optional - defaults in appsettings.json)
+      # Jwt__SecretKey: "convoy-production-jwt-secret-key-2025-minimum-32-characters-required-for-HS256"
+      # Jwt__ExpirationHours: 876000
+
+      # PHP API settings (optional - defaults in appsettings.json)
+      # PhpApi__GlobalPathForSupport: "http://delivery.garant.uz/api/"
+      # PhpApi__Username: "login"
+      # PhpApi__Password: "password"
+
+      # Auth settings (optional - defaults in appsettings.json)
+      # Auth__AllowedPositionIds: "86"
+      # Auth__OtpExpirationMinutes: 1
+      # Auth__OtpRateLimitSeconds: 60
+
+      # Telegram Bot settings (optional - defaults in appsettings.json)
+      # BotSettings__Telegram__BotToken: "YOUR_BOT_TOKEN"
+      # BotSettings__Telegram__ChannelId: "YOUR_CHANNEL_ID"
+
+      # Encryption settings (optional - defaults in appsettings.json)
+      # Encryption__Enabled: false
+      # Encryption__Key: "YOUR_BASE64_KEY"
+
+      # SMS Providers (optional - defaults in appsettings.json)
+      # SmsProviders__SmsFly__ApiKey: "YOUR_API_KEY"
+      # SmsProviders__Sayqal__UserName: "YOUR_USERNAME"
+      # SmsProviders__Sayqal__SecretKey: "YOUR_SECRET_KEY"
+
+    restart: always
+
+    # Health check (optional but recommended)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Logging configuration (optional but recommended)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

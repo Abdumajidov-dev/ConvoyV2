@@ -6,15 +6,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Convoy GPS Tracking System** - Enterprise GPS tracking with PostgreSQL partitioned tables, built with .NET 8. This system uses a hybrid ORM approach: Dapper for partitioned tables (high performance) and EF Core for standard tables (convenience).
 
+### CRITICAL CHANGES FROM ORIGINAL DESIGN
+
+**⚠️ IMPORTANT**: This system has evolved significantly from the initial architecture:
+
+1. **Authentication**: External PHP API handles login/OTP (NOT this backend)
+   - This API only validates JWT tokens from PHP API
+   - No internal OTP generation or SMS sending
+   - `PhpTokenAuthenticationHandler` replaces JWT bearer authentication
+
+2. **Notifications**: Firebase Cloud Messaging (FCM) instead of Telegram
+   - Admin notifications via push notifications (not Telegram bot)
+   - Device tokens stored in `device_tokens` table
+   - Firebase Admin SDK initialized on app startup
+
+3. **Location Monitoring**: Background service tracks user activity
+   - `CheckLocationCreatedBackrounService` runs every 1 minute
+   - Notifies admins when users offline > 20, 40, 60, 80, 100, 120 minutes
+   - Stores notification history in `admin_notifications` table
+
+4. **Location Clustering**: Automatic grouping of nearby locations
+   - Reduces response size by 4-10x (e.g., 43 → 10 locations)
+   - Calculates `stopped_time` for each cluster
+   - Applied automatically to `POST /api/locations/multiple_users`
+
+5. **Railway Deployment**: Cloud-native configuration
+   - Supports `DATABASE_URL` environment variable (PostgreSQL URI)
+   - Firebase credentials via `FIREBASE_CREDENTIALS_BASE64` (base64-encoded JSON)
+   - Health check endpoints for platform monitoring
+
 **Key Technologies**:
 - **PostgreSQL Partitioning**: Monthly partitioned `locations` table by `recorded_at` (format: `locations_MM_YYYY`) for efficient queries
 - **SignalR**: Real-time GPS location broadcasting to connected clients
-- **JWT Authentication**: OTP-based authentication with external PHP API integration
-- **Permission System**: Role-Based Access Control (RBAC) with granular permissions
-- **Dual SMS Providers**: Failover SMS system (SmsFly → Sayqal)
+- **PHP API Integration**: External PHP API for authentication (JWT token validation, no internal OTP/SMS)
+- **Firebase Cloud Messaging**: Push notifications to mobile devices for location monitoring alerts
+- **Location Clustering**: Automatic location grouping (10m radius) with stopped time calculation
+- **User Monitoring**: Background service checking user location activity and sending admin notifications
 - **Flutter Background Geolocation**: Full integration with flutter_background_geolocation library (extended coords, metadata, events)
-- **Telegram Bot Integration**: Channel notifications for locations, alerts, and custom reports
 - **snake_case JSON**: ALL API endpoints and JSON fields use snake_case naming convention
+- **Railway/Docker Deployment**: Support for both Railway cloud and Docker container deployment
 
 ## Build & Run Commands
 
@@ -186,23 +216,29 @@ Convoy/
 - Clients join groups via hub methods: `JoinUserTracking(userId)`, `JoinAllUsersTracking()`
 - Event name: `LocationUpdated` with `LocationResponseDto` payload
 
-**7. Authentication Flow (OTP + JWT + Logout)**
-- **Step 1 - Verify Phone**: `POST /api/auth/verify_number` → Validates user exists in external PHP API and checks allowed position IDs
-- **Step 2 - Send OTP**: `POST /api/auth/send_otp` → Generates OTP code, sends via SMS (SmsFly → Sayqal failover)
-- **Step 3 - Verify OTP**: `POST /api/auth/verify_otp` → Validates code, returns JWT token
-- **Step 4 - Use Token**: Include `Authorization: Bearer {token}` header in subsequent requests
-- **Step 5 - Get User Info**: `GET /api/auth/me` → Returns current user info from JWT token (requires authentication)
-- **Step 6 - Logout**: `POST /api/auth/logout` → Blacklists current token to prevent reuse (requires authentication)
-- Worker data cached in-memory during auth flow (phone number → PhpWorkerDto)
-- OTP codes stored in `otp_codes` table (EF Core), auto-expire after configured minutes (default: 1 minute)
-- Token blacklisting prevents logout'ed tokens from being reused (stored in `token_blacklist` table)
+**7. Authentication Flow (PHP API Integration)**
+- **IMPORTANT**: Authentication handled by external PHP API, NOT this backend
+- **Step 1 - Mobile Login**: User logs in via PHP API (handled by Flutter app)
+- **Step 2 - Get JWT Token**: PHP API returns JWT token to mobile app
+- **Step 3 - Use Token**: Include `Authorization: Bearer {token}` header in requests to this API
+- **Step 4 - Token Validation**: `PhpTokenService` decodes JWT token (no validation, trusted source)
+- **Step 5 - Get User Info**: `GET /api/auth/me` → Returns user info from JWT token claims
+- **Step 6 - Save Device Token**: `POST /api/auth/save_device_token` → Register FCM token for push notifications
+- JWT token contains: `user_id`, `unique_name`, `mobilephone`, `worker_guid`, `branch_guid`, `branch_name`, `position_id`
+- No OTP generation or SMS sending in this backend (removed from original design)
+- No token blacklist (logout handled by mobile app clearing token)
 
-**8. SMS Provider Failover Strategy**
-- `CompositeSmsService` implements `ISmsService` interface
-- Primary: `SmsFlySender` (attempts first)
-- Backup: `SayqalSender` (attempts if SmsFly fails)
-- Both providers use HttpClient with configured base URLs and credentials from `appsettings.json`
-- Logs provider failures for monitoring
+**8. Firebase Cloud Messaging (FCM) Integration**
+- **Purpose**: Send push notifications to mobile devices for location monitoring alerts
+- **Service**: `NotificationService` uses Firebase Admin SDK for sending notifications
+- **Device Registration**: `DeviceTokenService` manages FCM device tokens
+- **Initialization**: `DirectFirebaseService` singleton initializes Firebase on app startup
+- **Credential Loading**: Supports both environment variable (Railway) and file (local dev)
+  - Production: `FIREBASE_CREDENTIALS_BASE64` environment variable (base64 encoded JSON)
+  - Development: `firebase-adminsdk.json` file in API root directory
+- **Notification Types**: User offline alerts, location timeouts, admin notifications
+- **Target Users**: Can send to specific users or all admins (role='admin_unduruv')
+- See `FIREBASE_DEPLOYMENT.md` and `USER_LOCATION_MONITORING_GUIDE.md` for setup
 
 **9. API Response Pattern (ServiceResult + ApiResponse)**
 - **Service Layer**: Returns `ServiceResult<T>` or custom result wrappers with `Status`, `Message`, `Data` properties
@@ -296,6 +332,52 @@ Convoy/
 - **Multiple Devices**: Same user can connect from multiple devices, each tracked separately
 - See `SIGNALR_USER_ACTIVE_STATUS.md` and `SIGNALR_USER_STATUS_CHANGE.md` for complete documentation
 
+**15. Location Clustering & Stopped Time Calculation**
+- **Purpose**: Reduce location data by grouping nearby points and calculating stopped time
+- **Service**: `LocationClusteringService` automatically clusters locations within 10m radius
+- **Algorithm**: DBSCAN-like clustering - groups locations < 10m apart into clusters
+- **Output**: One representative location per cluster with `stopped_time` field
+- **Stopped Time**: Duration between first and last location in cluster (in minutes)
+- **Example**: 43 locations → 10 clustered locations (4.3x reduction)
+- **Endpoints**: `POST /api/locations/multiple_users` automatically applies clustering
+- **Configuration**: Change `ClusterRadiusMeters = 10.0` in `LocationClusteringService.cs`
+- **Benefits**: Reduced response size, fewer map markers, better UX, meaningful data
+- See `FILTERED_LOCATIONS_GUIDE.md` and `MULTIPLE_USERS_CLUSTERING.md` for details
+
+**16. User Location Monitoring & Admin Notifications**
+- **Purpose**: Monitor users for inactivity and notify admins via push notifications
+- **Background Service**: `CheckLocationCreatedBackrounService` runs every 1 minute
+- **Monitoring Logic**: Checks all active users' last location timestamp
+- **Thresholds**: Sends notifications at 20, 40, 60, 80, 100, 120 minutes offline
+- **Target Admins**: Only users with `role='admin_unduruv'` receive notifications
+- **Tables**:
+  - `device_tokens`: FCM tokens for push notifications
+  - `user_status_reports`: Tracks last location time and notification count
+  - `admin_notifications`: Stores all sent notifications
+- **Notification Content**: User name, offline duration, last seen time
+- **Deduplication**: Only sends one notification per threshold (no spam)
+- See `USER_LOCATION_MONITORING_GUIDE.md` for complete documentation
+
+**17. Railway Cloud Platform Deployment**
+- **Connection String**: Supports both `ConnectionStrings__DefaultConnection` and `DATABASE_URL` env vars
+- **PostgreSQL URI Conversion**: Automatically converts Railway's `postgresql://` URI to Npgsql format
+- **Firebase Credentials**: Base64-encoded JSON in `FIREBASE_CREDENTIALS_BASE64` environment variable
+- **Health Checks**: `/health` and `/` (redirects to Swagger) endpoints for Railway monitoring
+- **HTTPS Handling**: Disables HTTPS redirection in production (Railway handles SSL termination)
+- **Swagger**: Enabled in all environments (Railway requires public docs endpoint)
+- **Logs**: Console logging for Railway log aggregation
+- See `RAILWAY_FIREBASE_SETUP.md` and `PRODUCTION_DEPLOYMENT_GUIDE.md` for deployment
+
+**18. Portainer Docker Deployment**
+- **Container Management**: Deploy via Portainer UI using Docker Compose
+- **Docker Image**: `jm7uz/convoy:latest` (pre-built image from Docker Hub)
+- **Port Mapping**: External port 3908 → Internal port 8080
+- **Environment Variables**: Same as Railway (database connection, Firebase credentials)
+- **Health Checks**: Configured with 30s interval, 10s timeout, 3 retries, 40s start period
+- **Logging**: JSON file driver with 10MB max size, 3 file rotation
+- **Firebase Setup**: Use `encode-firebase-credentials.ps1` to convert JSON to base64
+- See `PORTAINER-DEPLOYMENT-GUIDE.md` for complete deployment instructions
+
 ## Database Schema
 
 ### Partitioned Table (Dapper)
@@ -325,64 +407,62 @@ locations_01_2026  -- January 2026
 
 ```sql
 users
-├── id SERIAL PRIMARY KEY
+├── id SERIAL PRIMARY KEY (internal DB key)
+├── user_id INTEGER UNIQUE (PHP API worker ID - external reference)
 ├── name VARCHAR(200)
+├── username VARCHAR(100)
 ├── phone VARCHAR(20)
-├── is_active BOOLEAN
-├── created_at, updated_at, delete_at
-
-otp_codes
-├── id SERIAL PRIMARY KEY
-├── phone_number VARCHAR(20)
-├── code VARCHAR(10)
-├── created_at TIMESTAMPTZ
-├── expires_at TIMESTAMPTZ
-├── is_used BOOLEAN
-└── IsValid (computed property: !is_used && expires_at > NOW())
-
-roles (Permission System)
-├── id BIGSERIAL PRIMARY KEY
-├── name VARCHAR(100) UNIQUE (e.g., "SuperAdmin", "Driver")
-├── display_name VARCHAR(200)
-├── description VARCHAR(500)
+├── branch_guid VARCHAR(100) (PHP API branch GUID)
+├── branch_name VARCHAR(200)
+├── worker_guid VARCHAR(100) (PHP API worker GUID)
+├── position_id INTEGER (PHP API position ID)
+├── image VARCHAR(500) (user avatar URL)
+├── user_type VARCHAR(50) (e.g., "worker", "admin")
+├── role VARCHAR(100) (e.g., "admin_unduruv", "driver")
 ├── is_active BOOLEAN
 └── created_at, updated_at, delete_at
 
-permissions (Permission System)
+device_tokens (FCM Push Notifications)
 ├── id BIGSERIAL PRIMARY KEY
-├── name VARCHAR(100) UNIQUE (e.g., "users.view", "locations.create")
-├── display_name VARCHAR(200)
-├── resource VARCHAR(50) (e.g., "users", "locations")
-├── action VARCHAR(50) (e.g., "view", "create")
-├── description VARCHAR(500)
-├── is_active BOOLEAN
+├── user_id BIGINT FK -> users.id
+├── token VARCHAR(500) (Firebase Cloud Messaging token)
+├── device_system VARCHAR(20) ("android", "ios")
+├── model VARCHAR(100) (device model name)
+├── device_id VARCHAR(100) (unique device identifier)
+├── is_physical_device BOOLEAN
+├── is_active BOOLEAN (token validity)
 └── created_at, updated_at, delete_at
 
-user_roles (Junction Table)
+user_status_reports (Location Monitoring)
 ├── id BIGSERIAL PRIMARY KEY
 ├── user_id BIGINT FK -> users.id
-├── role_id BIGINT FK -> roles.id
-├── assigned_at TIMESTAMPTZ
-├── assigned_by BIGINT (who assigned this role)
-├── created_at, updated_at, delete_at
-└── UNIQUE(user_id, role_id)
+├── last_location_time TIMESTAMPTZ (last location post time)
+├── last_notified_at TIMESTAMPTZ (last notification sent time)
+├── offline_duration_minutes INTEGER (current offline duration)
+├── is_notified BOOLEAN
+├── notification_count INTEGER (total notifications sent)
+└── created_at, updated_at, delete_at
 
-role_permissions (Junction Table)
+admin_notifications (Notification History)
 ├── id BIGSERIAL PRIMARY KEY
-├── role_id BIGINT FK -> roles.id
-├── permission_id BIGINT FK -> permissions.id
-├── granted_at TIMESTAMPTZ
-├── granted_by BIGINT (who granted this permission)
-├── created_at, updated_at, delete_at
-└── UNIQUE(role_id, permission_id)
+├── user_id BIGINT FK -> users.id (user being monitored)
+├── admin_user_id BIGINT FK -> users.id (admin receiving notification)
+├── notification_type VARCHAR(50) ("user_offline", "location_timeout")
+├── title VARCHAR(200)
+├── message VARCHAR(1000)
+├── offline_duration_minutes INTEGER
+├── is_sent BOOLEAN
+├── sent_at TIMESTAMPTZ
+├── is_read BOOLEAN
+├── read_at TIMESTAMPTZ
+└── created_at, updated_at, delete_at
 
-token_blacklist (Logout/Security)
+user_stopped_reports (Manual Stop Reports)
 ├── id BIGSERIAL PRIMARY KEY
-├── token_hash VARCHAR(500) UNIQUE
-├── user_id BIGINT FK -> users.id
-├── blacklisted_at TIMESTAMPTZ
-├── reason VARCHAR(200) (e.g., "logout", "security")
-└── expires_at TIMESTAMPTZ
+├── user_id INTEGER FK -> users.id
+├── location_id BIGINT (reference to location)
+├── reason VARCHAR (why user stopped)
+└── created_at, updated_at, delete_at
 ```
 
 ## Development Guidelines
@@ -394,12 +474,12 @@ token_blacklist (Logout/Security)
 3. **Dapper mapping**: Use column aliases in SELECT (e.g., `user_id as UserId`) or configure column mappings
 4. **New columns**: Add to `database-setup.sql` script, not EF migrations
 
-### When Modifying Standard Tables (User, OtpCode)
+### When Modifying Standard Tables (User, DeviceToken, etc.)
 
 1. **Use EF Core migrations** normally - standard tables without partitioning
 2. Generate migration: `dotnet ef migrations add MigrationName --project Convoy.Data --startup-project Convoy.Api`
 3. Apply migration: `dotnet ef database update --project Convoy.Data --startup-project Convoy.Api`
-4. **OtpCode cleanup**: Use `OtpService.CleanupExpiredOtpsAsync()` to remove old codes (call periodically or via background job)
+4. **Cleanup old data**: Use scheduled jobs or manual queries to clean old notifications/reports
 
 ### Adding New Partitioned Tables
 
@@ -461,36 +541,30 @@ If you need another partitioned table:
 
 ### Authentication & External API Integration
 
-- **External PHP API**: System validates users against external PHP API (`IPhpApiService`)
-  - Base URL configured in `appsettings.json` under `PhpApi:GlobalPathForSupport`
-  - Endpoint: `POST /auth-service/verification-user` (with phone_number in request body)
-  - Uses Basic Authentication (configured via `PhpApi:Username` and `PhpApi:Password`)
-  - Returns worker data: ID, name, position, branch info
-- **Position-based access control**: Configure allowed position IDs in `Auth:AllowedPositionIds` (comma-separated)
-  - Example: `"2,3,5"` allows only workers with these position IDs
-  - Empty = all positions allowed
-- **JWT Token claims**:
-  - `user_id`: Worker ID (primary identifier)
-  - `unique_name`: Worker name
-  - `mobilephone`: Phone number
-  - `worker_guid`, `branch_guid`, `branch_name`, `position_id`: Worker metadata
-- **Token configuration**: `Jwt:SecretKey`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpirationHours` in appsettings
-- **OTP configuration**:
-  - `Auth:OtpLength` (default: 4) - OTP kod uzunligi
-  - `Auth:OtpExpirationMinutes` (default: 1) - OTP kodning amal qilish muddati (daqiqalarda)
-  - `Auth:OtpRateLimitSeconds` (default: 60) - Bir telefon raqam uchun OTP jo'natish oralig'i (soniyalarda, 0 = o'chirish)
+- **CRITICAL**: This backend does NOT handle login/registration - delegated to external PHP API
+- **PHP Token Validation**: `PhpTokenAuthenticationHandler` decodes JWT tokens from PHP API
+  - Token issued by external PHP system (not this backend)
+  - Contains claims: `user_id`, `unique_name`, `mobilephone`, `worker_guid`, `branch_guid`, `branch_name`, `position_id`, `role`
+  - No signature validation (trusted source assumption)
+- **User Sync**: First request with valid token auto-creates/updates user in local database
+  - Extracts user data from JWT claims
+  - Creates or updates user record in `users` table
+- **Token Service**: `IPhpTokenService` for decoding tokens (no validation, just parsing)
+- **Device Token Registration**: After login, mobile app calls `POST /api/auth/save_device_token`
+  - Saves FCM token for push notifications
+  - Required for receiving location monitoring alerts
 
-### SMS Provider Configuration
+### Firebase Cloud Messaging Configuration
 
-- **Composite pattern**: `CompositeSmsService` tries providers in order (failover)
-- **Provider 1 - SmsFly**:
-  - Config path: `SmsProviders:SmsFly:ApiKey`, `SmsProviders:SmsFly:ApiUrl`
-  - Used first, falls back to Sayqal if fails
-- **Provider 2 - Sayqal**:
-  - Config path: `SmsProviders:Sayqal:UserName`, `SmsProviders:Sayqal:SecretKey`, `SmsProviders:Sayqal:ApiUrl`
-  - Backup provider
-- **Development mode**: OTP codes logged to console with warning level (search logs for "DEVELOPMENT")
-- **HttpClient registration**: Both providers use `AddHttpClient<T>()` in DI container
+- **Service Account Setup**: Download `firebase-adminsdk.json` from Firebase Console → Project Settings → Service Accounts
+- **Development**: Place `firebase-adminsdk.json` in `Convoy.Api/` directory
+- **Production (Railway)**:
+  1. Base64 encode the JSON file: `base64 -w 0 firebase-adminsdk.json > firebase-base64.txt`
+  2. Set environment variable: `FIREBASE_CREDENTIALS_BASE64=<base64-string>`
+- **Initialization**: `DirectFirebaseService` singleton loads credentials on app startup
+- **Testing**: Check logs for "Firebase Admin SDK initialized successfully"
+- **Device Token Storage**: Mobile apps send FCM tokens via `POST /api/auth/save_device_token`
+- See `FIREBASE_DEPLOYMENT.md` and `RAILWAY_FIREBASE_SETUP.md` for detailed setup
 
 ## Connection String Configuration
 
@@ -508,40 +582,55 @@ If you need another partitioned table:
 - Default password: `Danger124` (change for production)
 - Environment variable: `ConnectionStrings__DefaultConnection`
 
-## OTP Rate Limiting Quick Reference
+**Railway Cloud Platform**:
+- Supports `DATABASE_URL` environment variable (PostgreSQL URI format)
+- Automatically converts `postgresql://user:pass@host:port/db` to Npgsql format
+- Priority: `ConnectionStrings__DefaultConnection` > `DATABASE_URL` > appsettings.json
+- URI conversion handles URL-encoded passwords
 
-### Development/Testing (No Rate Limit)
-```json
-// appsettings.Development.json
-{
-  "Auth": {
-    "OtpRateLimitSeconds": 0  // Disable rate limiting
-  }
-}
+**Portainer (Production)**:
+- Docker image: `jm7uz/convoy:latest`
+- External port: 3908 → Internal port: 8080
+- Database: Connect via Docker bridge network (172.17.0.1) or direct IP
+- Firebase credentials: Base64-encoded via `FIREBASE_CREDENTIALS_BASE64` env var
+- Use `encode-firebase-credentials.ps1` script to generate base64 string
+
+## Background Services Configuration
+
+### CheckLocationCreatedBackrounService
+
+**Purpose**: Monitor user location activity and send admin notifications
+
+**Configuration**:
+```csharp
+// Runs every 1 minute
+private const int CheckIntervalMinutes = 1;
+
+// Notification thresholds (minutes offline)
+private readonly int[] NotificationThresholds = { 20, 40, 60, 80, 100, 120 };
+
+// Target admins by role
+private const string AdminRole = "admin_unduruv";
 ```
 
-### Production (Recommended Settings)
-```json
-// appsettings.json
-{
-  "Auth": {
-    "OtpRateLimitSeconds": 60  // 1 minute between requests
-  }
-}
+**Logs to monitor**:
+- "🔄 CheckLocationCreatedBackrounService started at..."
+- "🔍 Checking user locations at..."
+- "🚨 NOTIFICATION YUBORILDI: User ... - 20 daqiqadan beri offline"
+
+### Location Clustering Configuration
+
+**Default settings**:
+```csharp
+// LocationClusteringService.cs
+private const double ClusterRadiusMeters = 10.0;  // 10 meter radius
 ```
 
-### Custom Settings
-```json
-{
-  "Auth": {
-    "OtpRateLimitSeconds": 30   // 30 seconds
-    // or
-    "OtpRateLimitSeconds": 120  // 2 minutes
-  }
-}
+**Change clustering radius**:
+```csharp
+private const double ClusterRadiusMeters = 20.0;  // For looser clustering
+private const double ClusterRadiusMeters = 5.0;   // For tighter clustering
 ```
-
-**Note**: Setting to `0` completely disables rate limiting. Use only for temporary development/testing purposes.
 
 ---
 
@@ -565,39 +654,43 @@ hubConnection.on('LocationUpdated', (data) => {
 });
 ```
 
-### Implementing OTP Authentication Flow
+### Implementing PHP API Authentication Flow
 
-```csharp
-// Client-side flow
-// Step 1: Verify phone exists
-POST /api/auth/verify_number
-{ "phone_number": "+998901234567" }
-// Response: { status: true, message: "...", data: { worker_id, worker_name, ... } }
+```dart
+// Flutter client-side flow
 
-// Step 2: Request OTP
-POST /api/auth/send_otp
-{ "phone_number": "+998901234567" }
-// SMS sent via SmsFly or Sayqal
-// Response: { status: true, message: "OTP sent", data: null }
+// Step 1: Login via PHP API (external system)
+final response = await phpApi.login(phone: "+998901234567", password: "1234");
+final jwtToken = response.data['token'];  // JWT token from PHP API
 
-// Step 3: Verify OTP and get JWT
-POST /api/auth/verify_otp
-{ "phone_number": "+998901234567", "otp_code": "1234" }
-// Response: { status: true, message: "...", data: { token: "eyJhbGc..." } }
+// Step 2: Save token locally
+await secureStorage.write(key: 'auth_token', value: jwtToken);
 
-// Step 4: Use token to get user info
+// Step 3: Get user info from Convoy API
 GET /api/auth/me
-Headers: Authorization: Bearer eyJhbGc...
-// Response: { status: true, message: "...", data: { user_id, name, phone, ... } }
+Headers: Authorization: Bearer {jwtToken}
+// Response: { status: true, data: { user_id, name, phone, role, ... } }
+
+// Step 4: Save FCM device token for notifications
+POST /api/auth/save_device_token
+Headers: Authorization: Bearer {jwtToken}
+Body: {
+  "user_id": 5475,
+  "device_info": {
+    "device_token": "fcm-token-from-firebase",
+    "device_system": "android",
+    "model": "Samsung Galaxy S21",
+    "device_id": "unique-device-id",
+    "is_physical_device": true
+  }
+}
 
 // Step 5: Access protected endpoints
 GET /api/locations/user/123
-Headers: Authorization: Bearer eyJhbGc...
+Headers: Authorization: Bearer {jwtToken}
 
-// Step 6: Logout (optional - invalidates token)
-POST /api/auth/logout
-Headers: Authorization: Bearer eyJhbGc...
-// Response: { status: true, message: "Muvaffaqiyatli logout qilindi", data: null }
+// Step 6: Logout (mobile app clears token, no backend invalidation)
+await secureStorage.delete(key: 'auth_token');
 ```
 
 ### Querying Partitioned Table with Dapper
@@ -646,12 +739,48 @@ const string sql = @"
 3. Register in `Program.cs`: `builder.Services.AddScoped<IYourService, YourService>()`
 4. **For services needing SignalR**: Inject `IHubContext<LocationHub>` as `object?` (cast to `dynamic` when using)
 
-### Adding New SMS Provider
+### Adding Location Clustering to Existing Endpoints
 
-1. Create class in `Convoy.Service/Services/SmsProviders/` implementing `ISmsService`
-2. Add configuration keys to `appsettings.json`
-3. Register HttpClient: `builder.Services.AddHttpClient<YourSmsProvider>()`
-4. Update `CompositeSmsService` to include new provider in fallback chain
+```csharp
+// In LocationService
+public async Task<List<LocationResponseDto>> GetUserLocationsAsync(int userId, DateTime date)
+{
+    // 1. Get raw locations from repository
+    var locations = await _locationRepository.GetByUserAndDateAsync(userId, date);
+
+    // 2. Apply clustering
+    var clustered = _clusteringService.GetFilteredLocationsWithStoppedTime(locations);
+
+    // 3. Map to DTOs
+    return _mapper.Map<List<LocationResponseDto>>(clustered);
+}
+```
+
+### Adding Firebase Notification to New Features
+
+```csharp
+// 1. Inject INotificationService
+private readonly INotificationService _notificationService;
+
+// 2. Get admin users
+var admins = await _userRepository.GetByRoleAsync("admin_unduruv");
+
+// 3. Send notification
+foreach (var admin in admins)
+{
+    await _notificationService.SendNotificationToUserAsync(
+        userId: admin.Id,
+        title: "Location Alert",
+        body: $"User {userName} has been offline for {minutes} minutes",
+        data: new Dictionary<string, string>
+        {
+            { "type", "user_offline" },
+            { "user_id", userId.ToString() },
+            { "offline_minutes", minutes.ToString() }
+        }
+    );
+}
+```
 
 ### Creating New Background Service
 
@@ -809,51 +938,54 @@ class MyApp extends StatefulWidget with WidgetsBindingObserver {
 - **Invalid token**: Ensure `Jwt:SecretKey` matches between token generation and validation
 - **Missing claims**: Verify PHP API returns all required worker fields
 
-### OTP/SMS Issues
-- **OTP not received**: Check logs for SMS provider failures
-  - SmsFly failed → Should automatically try Sayqal
-  - Both failed → Check configuration keys and network connectivity
-- **OTP expired**: Default 1 minute, check `Auth:OtpExpirationMinutes` config
-- **Wrong OTP**: OTP is one-time use, request new one if failed
-- **Rate limit exceeded**: User trying to request OTP too frequently
-  - Default: 60 seconds between requests for same phone number
-  - Error message: "Iltimos N soniya kuting va qayta urinib ko'ring"
-  - Configure via `Auth:OtpRateLimitSeconds`:
-    - Set to `60` (recommended for production) - 1 minute wait time
-    - Set to `30` - 30 seconds wait time
-    - Set to `0` - **DISABLE** rate limiting (for development/testing only, NOT recommended for production)
-  - When disabled, logs will show: "OTP rate limiting is DISABLED"
-- **Development testing**: OTP codes logged to console (search for "DEVELOPMENT" in logs)
-- **Phone number format**: SmsFly automatically formats phone numbers (9 digits → adds 998 prefix)
+### PHP API Authentication Issues
+- **401 Unauthorized**: Check token is valid and from PHP API
+  - Verify token in request header: `Authorization: Bearer {token}`
+  - Check token is not expired (expires_at claim)
+- **Invalid token format**: PHP API must return valid JWT token
+  - Required claims: `user_id`, `unique_name`, `mobilephone`, `role`
+- **User not synced**: First request with token auto-creates user
+  - Check user exists: `SELECT * FROM users WHERE user_id = 5475;`
+  - If not created, check JWT claims are present
+- **Token validation**: This backend does NOT validate signatures (trusted source)
+  - Tokens come from external PHP API (already validated there)
 
-### External PHP API Integration Issues
-- **User not found**: Verify phone number exists in PHP API database
-- **Position denied**: Check `Auth:AllowedPositionIds` configuration
-- **API unreachable**: Verify `PhpApi:GlobalPathForSupport` and network connectivity
-- **Authentication failed**: Check `PhpApi:Username` and `PhpApi:Password` are correct (uses Basic Auth)
-- **Endpoint not found**: Ensure using POST `/auth-service/verification-user` with phone_number in body
-- **Timeout**: Increase HttpClient timeout in `PhpApiService` if needed
+### Firebase Cloud Messaging Issues
+- **Notifications not received**: Check Firebase setup
+  1. Verify credentials loaded: Check logs for "Firebase Admin SDK initialized successfully"
+  2. Verify device token saved: `SELECT * FROM device_tokens WHERE user_id = 5475 AND is_active = true;`
+  3. Check admin users exist: `SELECT * FROM users WHERE role = 'admin_unduruv' AND is_active = true;`
+  4. Test notification manually: Use `POST /api/notification/test_notification`
+- **Firebase initialization failed**:
+  - Development: Ensure `firebase-adminsdk.json` exists in `Convoy.Api/`
+  - Production: Check `FIREBASE_CREDENTIALS_BASE64` environment variable is set correctly
+  - Verify base64 encoding: `echo $FIREBASE_CREDENTIALS_BASE64 | base64 -d | jq .`
+- **Device token not working**: Token may be expired/invalid
+  - Mobile app should refresh token on app startup
+  - Call `POST /api/auth/save_device_token` after login
 
-### Permission System Issues
-- **403 Forbidden**: User lacks required permission for endpoint
-  - Check user has role assigned: `SELECT * FROM user_roles WHERE user_id = 123;`
-  - Check role has permission: `SELECT p.name FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = 1;`
-  - Verify permission exists: `SELECT * FROM permissions WHERE name = 'users.view';`
-- **Permission not working**: Ensure `PermissionSeedService` ran successfully on startup
-  - Check logs for: "Permission seed completed successfully"
-  - Manually run: `psql -U postgres -d convoy_db -f add-permission-system.sql`
-- **GetMe returns no permissions**: User has no roles assigned
-  - Assign role via API: `POST /api/permissions/users/{userId}/roles/{roleId}`
-  - Or SQL: `INSERT INTO user_roles (user_id, role_id, assigned_at, created_at) VALUES (1, 4, NOW(), NOW());`
+### Location Monitoring Issues
+- **Background service not running**: Check logs for startup errors
+  - Expected log: "🔄 CheckLocationCreatedBackrounService started at..."
+  - Verify service registered in `Program.cs`: `AddHostedService<CheckLocationCreatedBackrounService>()`
+- **Notifications not sent**: Debug checklist
+  1. User offline > 20 minutes? Check: `SELECT * FROM user_status_reports WHERE user_id = 5475;`
+  2. Threshold already triggered? Check `last_notified_at` and `notification_count`
+  3. Admin has device token? Check: `SELECT dt.* FROM device_tokens dt JOIN users u ON dt.user_id = u.id WHERE u.role = 'admin_unduruv';`
+  4. Background service running? Check logs every 1 minute
+- **User stays "offline" after posting location**: Check location insert triggers
+  - Verify location inserted: `SELECT * FROM locations WHERE user_id = 5475 ORDER BY recorded_at DESC LIMIT 1;`
+  - Check user_status_reports updated: Should have new `last_location_time`
 
-### Token Blacklist Issues
-- **Logout not working**: Check `token_blacklist` table exists
-  - Create manually if needed (see database schema)
-- **Token still valid after logout**: Verify `PermissionAuthorizationHandler` checks blacklist
-- **Blacklist table full**: Implement cleanup job to remove expired tokens:
-  ```sql
-  DELETE FROM token_blacklist WHERE expires_at < NOW();
-  ```
+### Railway Deployment Issues
+- **Database connection failed**: Check `DATABASE_URL` environment variable
+  - Railway provides: `postgresql://user:pass@host:port/db`
+  - Verify conversion to Npgsql format in logs
+- **Firebase not working**: Check `FIREBASE_CREDENTIALS_BASE64` environment variable
+  - Must be base64-encoded JSON (no newlines)
+  - Test encoding: `cat firebase-adminsdk.json | base64 -w 0`
+- **Health check failing**: Railway expects `/health` or `/` to return 200 OK
+  - Both endpoints configured, check logs for startup errors
 
 ### SignalR User Active Status Issues
 - **User not marked inactive on disconnect**: Flutter didn't call `RegisterUser(userId)` after connecting
@@ -888,14 +1020,18 @@ class MyApp extends StatefulWidget with WidgetsBindingObserver {
 - **`SERVICE_RESULT_PATTERN.md`**: How services return results and controllers handle them - MANDATORY reading
 - **`API_RESPONSE_FORMAT.md`**: Standard API response format with complete examples for all endpoints
 - **`SNAKE_CASE_API_GUIDE.md`**: Complete guide to snake_case naming convention - CRITICAL for API consistency
-- **`PERMISSION_SYSTEM_GUIDE.md`**: Complete Permission & Role-Based Access Control (RBAC) guide - MANDATORY for authorization
+- **`USER_LOCATION_MONITORING_GUIDE.md`**: Location monitoring system with admin notifications - CRITICAL for understanding background services
+- **`FILTERED_LOCATIONS_GUIDE.md`**: Location clustering and stopped time calculation - IMPORTANT for map optimization
+- **`FIREBASE_DEPLOYMENT.md`**: Firebase Cloud Messaging setup and deployment guide
+- **`RAILWAY_FIREBASE_SETUP.md`**: Railway platform deployment with Firebase integration
+- **`PORTAINER-DEPLOYMENT-GUIDE.md`**: Portainer Docker deployment with complete setup instructions
+- **`PRODUCTION_DEPLOYMENT_GUIDE.md`**: Complete production deployment checklist
 - **`SIGNALR-TESTING-GUIDE.md`**: Complete testing guide for SignalR real-time features
 - **`FLUTTER-SIGNALR-EXAMPLE.md`**: Flutter client implementation examples
 - **`SIGNALR_USER_ACTIVE_STATUS.md`**: SignalR user active/inactive tracking - CRITICAL for connection lifecycle
 - **`SIGNALR_USER_STATUS_CHANGE.md`**: User manual status change and disconnect - Flutter integration patterns
 - **`FLUTTER_ENCRYPTION_GUIDE.md`**: End-to-end AES-256 encryption implementation for Flutter (request/response encryption)
 - **`ENCRYPTION_EXCLUDED_ROUTES_GUIDE.md`**: How to exclude specific routes from encryption (e.g., `/api/locations`)
-- **`TELEGRAM_SERVICE_GUIDE.md`**: Telegram bot integration - kanalga xabar yuborish (locations, alerts, reports)
 - **`FLUTTER_BACKGROUND_GEOLOCATION_INTEGRATION.md`**: Flutter Background Geolocation library integration - complete migration guide
 
 ### Code & Scripts
@@ -916,34 +1052,6 @@ class MyApp extends StatefulWidget with WidgetsBindingObserver {
   "ConnectionStrings": {
     "DefaultConnection": "Host=localhost;Port=5432;Database=convoy_db;Username=postgres;Password=YOUR_PASSWORD;Include Error Detail=true"
   },
-  "Jwt": {
-    "SecretKey": "your-256-bit-secret-key-here-make-it-long-and-secure-change-this-in-production",
-    "Issuer": "ConvoyApi",
-    "Audience": "ConvoyClients",
-    "ExpirationHours": 24
-  },
-  "Auth": {
-    "AllowedPositionIds": "86",  // Comma-separated position IDs, empty = all positions
-    "OtpLength": 4,
-    "OtpExpirationMinutes": 1,
-    "OtpRateLimitSeconds": 60  // Minimum seconds between OTP requests for same phone number
-  },
-  "PhpApi": {
-    "GlobalPathForSupport": "https://your-php-api.com/api/",
-    "Username": "login",
-    "Password": "password"
-  },
-  "SmsProviders": {
-    "SmsFly": {
-      "ApiKey": "your-api-key",
-      "ApiUrl": "https://api.smsfly.uz/send"
-    },
-    "Sayqal": {
-      "UserName": "your-username",
-      "SecretKey": "your-secret-key",
-      "ApiUrl": "https://routee.sayqal.uz/sms/TransmitSMS"
-    }
-  },
   "DeploymentUrl": "https://your-deployment-url.com",
   "Encryption": {
     "Enabled": false,  // Set to true in production
@@ -953,17 +1061,22 @@ class MyApp extends StatefulWidget with WidgetsBindingObserver {
 }
 ```
 
-**IMPORTANT**: Configuration structure changed - SMS providers are nested under `SmsProviders` object, and PhpApi uses `GlobalPathForSupport` instead of `BaseUrl`.
+**IMPORTANT**:
+- OTP/SMS providers removed (authentication via external PHP API)
+- JWT configuration removed (tokens issued by PHP API, not this backend)
+- Firebase credentials loaded from file or environment variable (not appsettings.json)
 
 ### Environment-Specific Overrides
 
 - **Development**: Use `appsettings.Development.json` for local settings
+  - Place `firebase-adminsdk.json` in `Convoy.Api/` directory
 - **Docker**: Set via environment variables (double underscore notation):
   - `ConnectionStrings__DefaultConnection`
-  - `Jwt__SecretKey`
-  - `PhpApi__GlobalPathForSupport`
-  - `SmsProviders__SmsFly__ApiKey`
-- **Production**: Use secrets management (Azure Key Vault, AWS Secrets Manager, etc.)
+  - `Encryption__Enabled`, `Encryption__Key`, `Encryption__IV`
+- **Railway/Cloud**: Use platform-specific environment variables:
+  - `DATABASE_URL` (PostgreSQL connection string in URI format)
+  - `FIREBASE_CREDENTIALS_BASE64` (base64-encoded Firebase service account JSON)
+  - `ConnectionStrings__DefaultConnection` (optional, overrides DATABASE_URL)
 
 ---
 

@@ -170,6 +170,109 @@ public class CheckLocationCreatedBackrounService : BackgroundService
 
             await context.SaveChangesAsync(stoppingToken);
 
+            // 1 SOATDAN KO'P TO'XTAB QOLGAN BO'LSA - UserStoppedReport yaratish
+            // IMPORTANT: Har 1 soatda YANGI report yaratamiz (update emas!)
+            // Bu hisobot table bo'lgani uchun tarixni saqlash kerak
+            //
+            // Ikki xil holatni tekshiramiz:
+            // 1) User 1 soatdan ortiq location yubormaganu (offline)
+            // 2) User location yuboryapti lekin 1 soat davomida bir joyda turgan (stopped)
+
+            var shouldCreateStoppedReport = false;
+            string stoppedReason = "";
+
+            // So'nggi stopped report'ni olish (takrorlanmasligi uchun)
+            var lastStoppedReport = await context.UserStoppedReports
+                .Where(r => r.UserId == userId)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync(stoppingToken);
+
+            // Agar so'nggi report kamida 1 soat oldin yaratilgan bo'lsa yoki umuman bo'lmasa
+            var canCreateNewReport = lastStoppedReport == null ||
+                                    (DateTime.UtcNow - lastStoppedReport.CreatedAt).TotalMinutes >= 60;
+
+            if (canCreateNewReport)
+            {
+                // HOLATNI 1: User 1 soatdan ortiq offline (location yubormaganu)
+                if (offlineDurationInt >= 60)
+                {
+                    shouldCreateStoppedReport = true;
+                    stoppedReason = $"User {offlineDurationInt} daqiqadan beri location yubormaganu (offline)";
+                }
+                // HOLATNI 2: User aktiv lekin bir joyda turgan (1 soat davomida 100m radiusda)
+                else if (offlineDurationInt < 20) // User aktiv (20 daqiqa ichida location yuborgan)
+                {
+                    // So'nggi 1 soat davomidagi barcha locationlarni olish
+                    var oneHourAgo = currentTime.AddHours(-1);
+                    var recentLocations = (await locationRepo.GetUserLocationsAsync(
+                        userId, oneHourAgo, currentTime)).ToList();
+
+                    if (recentLocations != null && recentLocations.Count >= 3)
+                    {
+                        // Barcha locationlar bir joyda (100m radiusda) ekanligini tekshirish
+                        var firstLocation = recentLocations.OrderBy(l => l.RecordedAt).First();
+                        var allWithinRadius = recentLocations.All(loc =>
+                        {
+                            var distance = CalculateDistance(
+                                (double)firstLocation.Latitude,
+                                (double)firstLocation.Longitude,
+                                (double)loc.Latitude,
+                                (double)loc.Longitude);
+                            return distance <= 100; // 100 metr radius
+                        });
+
+                        if (allWithinRadius)
+                        {
+                            var stoppedDuration = (int)(currentTime - recentLocations.Min(l => l.RecordedAt)).TotalMinutes;
+                            if (stoppedDuration >= 60)
+                            {
+                                shouldCreateStoppedReport = true;
+                                stoppedReason = $"1 soat davomida bir joyda turgan ({recentLocations.Count} ta location, 100m radiusda)";
+                            }
+                        }
+                    }
+                }
+
+                // YANGI Stopped report yaratish (agar kerak bo'lsa)
+                // CRITICAL: Har safar YANGI record yaratamiz, update qilmaymiz!
+                if (shouldCreateStoppedReport)
+                {
+                    var lastLocation = lastLocations.FirstOrDefault();
+                    if (lastLocation != null)
+                    {
+                        var stoppedReport = new UserStoppedReport
+                        {
+                            UserId = userId,
+                            LocationId = lastLocation.Id,
+                            Latitude = lastLocation.Latitude,
+                            Longitude = lastLocation.Longitude,
+                            StoppedAt = lastLocationTime.Value,
+                            StoppedDurationMinutes = offlineDurationInt >= 60 ? offlineDurationInt : 60,
+                            Reason = stoppedReason,
+                            IsResolved = false,
+                            CreatedAt = DateTime.UtcNow
+                        };
+
+                        context.UserStoppedReports.Add(stoppedReport);
+                        await context.SaveChangesAsync(stoppingToken);
+
+                        _logger.LogWarning(
+                            "🛑 YANGI STOPPED REPORT YARATILDI: User {UserId} ({UserName}) - {Duration} daqiqa to'xtab qolgan. " +
+                            "Sabab: {Reason}. Report ID: {ReportId}",
+                            userId, userName, offlineDurationInt, stoppedReason, stoppedReport.Id);
+                    }
+                }
+            }
+            else
+            {
+                // So'nggi report 1 soat ichida yaratilgan, yangi report yaratmaymiz
+                var minutesSinceLastReport = (DateTime.UtcNow - lastStoppedReport.CreatedAt).TotalMinutes;
+                _logger.LogDebug(
+                    "User {UserId} ({UserName}) to'xtab qolgan, lekin so'nggi report {Minutes:F0} daqiqa oldin yaratilgan. " +
+                    "Yangi report yaratish uchun {Remaining:F0} daqiqa kutish kerak.",
+                    userId, userName, minutesSinceLastReport, 60 - minutesSinceLastReport);
+            }
+
             // Notification yuborish kerakligini aniqlash
             if (offlineDurationInt >= 20) // Minimum 20 minut offline
             {
@@ -257,6 +360,31 @@ public class CheckLocationCreatedBackrounService : BackgroundService
         {
             _logger.LogError(ex, "Notification yuborishda xatolik. UserId: {UserId}", userId);
         }
+    }
+
+    /// <summary>
+    /// Haversine formula orqali ikki nuqta orasidagi masofani hisoblash (metrda)
+    /// </summary>
+    private double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double EarthRadiusKm = 6371.0;
+
+        var dLat = DegreesToRadians(lat2 - lat1);
+        var dLon = DegreesToRadians(lon2 - lon1);
+
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        var distanceKm = EarthRadiusKm * c;
+
+        return distanceKm * 1000; // Metrga o'tkazish
+    }
+
+    private double DegreesToRadians(double degrees)
+    {
+        return degrees * Math.PI / 180.0;
     }
 }
 

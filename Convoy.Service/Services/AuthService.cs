@@ -157,48 +157,69 @@ public class AuthService : IAuthService
     }
 
     /// <summary>
-    /// User ma'lumotlarini olish - PHP API'ga murojaat qiladi
-    /// PHP API'dan kelgan ma'lumotlarni Flutter uchun kerakli formatga o'tkazadi
+    /// User ma'lumotlarini olish - Token'dan user_id ni oladi va local database'dan ma'lumotlarni qaytaradi
+    /// Local database'da user mavjud bo'lishi kerak (sync qilingan bo'lishi kerak)
     /// </summary>
     public async Task<AuthResponseDto<UserPermissionsDto>> GetMeAsync(string token)
     {
         try
         {
-            _logger.LogInformation("Calling PHP API get me with token");
+            _logger.LogInformation("Getting user info from token and local database");
 
-            // PHP API'ga murojaat qilish
-            var phpResponse = await _phpApiService.GetMeAsync(token);
+            // Token'dan user_id ni olish
+            var phpUser = _phpTokenService.DecodeToken(token);
 
-            if (!phpResponse.Status || phpResponse.Result == null)
+            if (phpUser == null || phpUser.WorkerId <= 0)
             {
-                var errorMessage = phpResponse.GetMessage();
-                _logger.LogWarning("PHP API get me failed: {Message}", errorMessage);
-                return AuthResponseDto<UserPermissionsDto>.Failure(
-                    string.IsNullOrEmpty(errorMessage) ? "Token noto'g'ri yoki muddati tugagan" : errorMessage
-                );
+                _logger.LogWarning("Invalid token or user_id not found in token");
+                return AuthResponseDto<UserPermissionsDto>.Failure("Token noto'g'ri yoki muddati tugagan");
             }
 
-            var phpUser = phpResponse.Result;
+            var userId = phpUser.WorkerId;
+            _logger.LogInformation("Token decoded successfully: UserId={UserId}", userId);
 
-            // User'ni local database'ga sync qilish (create yoki update)
-            _logger.LogInformation("Syncing user data to local DB: WorkerId={WorkerId}", phpUser.WorkerId);
-            await SyncUserFromTokenAsync(phpUser);
+            // Local database'dan user ma'lumotlarini olish
+            var localUser = await _userService.GetByUserIdAsync(userId);
 
-            // Flutter uchun response DTO yaratish
+            if (localUser == null)
+            {
+                _logger.LogWarning("User not found in local database: UserId={UserId}", userId);
+
+                // User local DB'da yo'q - PHP API'dan sync qilish
+                _logger.LogInformation("Fetching user from PHP API and syncing to local DB");
+                var phpResponse = await _phpApiService.GetMeAsync(token);
+
+                if (!phpResponse.Status || phpResponse.Result == null)
+                {
+                    return AuthResponseDto<UserPermissionsDto>.Failure("User topilmadi");
+                }
+
+                await SyncUserFromTokenAsync(phpResponse.Result);
+                localUser = await _userService.GetByUserIdAsync(userId);
+
+                if (localUser == null)
+                {
+                    return AuthResponseDto<UserPermissionsDto>.Failure("User yaratishda xatolik yuz berdi");
+                }
+            }
+
+            // Local database'dan olingan ma'lumotlarni response DTO ga map qilish
             var response = new UserPermissionsDto
             {
-                UserId = phpUser.WorkerId,
-                Name = phpUser.Name,
-                Username = phpUser.Username,
-                Image = phpUser.Image,
-                Phone = phpUser.Phone,
-                BranchGuid = phpUser.BranchGuid ?? phpUser.FilialGuid ?? "",
-                Role = phpUser.App?.Allowed?.Role ?? phpUser.Role,
+                UserId = localUser.UserId ?? 0,
+                Name = localUser.Name,
+                Username = localUser.Username ?? "",
+                Image = localUser.Image,
+                Phone = localUser.Phone ?? "",
+                BranchGuid = localUser.BranchGuid ?? "",
+                Role = localUser.Role,
+                IsActive = localUser.IsActive ? "true" : "false", // bool -> string conversion
                 RoleId = new List<long>(), // Bo'sh array
                 Permissions = new Dictionary<string, List<string>>() // Bo'sh object
             };
 
-            _logger.LogInformation("Successfully retrieved user data from PHP API: WorkerId={WorkerId}", phpUser.WorkerId);
+            _logger.LogInformation("Successfully retrieved user from local DB: UserId={UserId}, IsActive={IsActive}",
+                localUser.UserId, localUser.IsActive);
 
             return AuthResponseDto<UserPermissionsDto>.Success(
                 response,
@@ -207,7 +228,7 @@ public class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting user from PHP API");
+            _logger.LogError(ex, "Error getting user info");
             return AuthResponseDto<UserPermissionsDto>.Failure("Xatolik yuz berdi");
         }
     }
@@ -241,17 +262,22 @@ public class AuthService : IAuthService
                 existingUser.Image = phpUser.Photo;
                 existingUser.UserType = phpUser.Type;
                 existingUser.Role = phpUser.Role;
+                // Role: App.Allowed.Role dan olish (agar null bo'lsa phpUser.Role ishlatiladi)
+               // existingUser.Role = phpUser.App?.Allowed?.Role ?? phpUser.Role;
                 //existingUser.IsActive = true; // Token active bo'lsa user ham active
 
                 await _userService.UpdateAsync(existingUser.Id, existingUser);
 
-                _logger.LogInformation("User updated successfully: WorkerId={WorkerId}, Name={Name}",
-                    phpUser.WorkerId, phpUser.Name);
+                _logger.LogInformation("User updated successfully: WorkerId={WorkerId}, Name={Name}, Role={Role}",
+                    phpUser.WorkerId, phpUser.Name, existingUser.Role);
             }
             else
             {
                 // User mavjud emas - yangi user yaratish
                 _logger.LogInformation("User not found with worker_id={WorkerId}, creating new user", phpUser.WorkerId);
+
+                // Role: App.Allowed.Role dan olish (agar null bo'lsa phpUser.Role ishlatiladi)
+                var userRole = phpUser.App?.Allowed?.Role ?? phpUser.Role;
 
                 var newUser = new Domain.Entities.User
                 {
@@ -265,14 +291,14 @@ public class AuthService : IAuthService
                     PositionId = phpUser.PositionId,
                     Image = phpUser.Photo,
                     UserType = phpUser.Type,
-                    Role = phpUser.Role,
+                    Role = userRole,
                     IsActive = true
                 };
 
                 await _userService.CreateAsync(newUser);
 
-                _logger.LogInformation("User created successfully: WorkerId={WorkerId}, Name={Name}",
-                    phpUser.WorkerId, phpUser.Name);
+                _logger.LogInformation("User created successfully: WorkerId={WorkerId}, Name={Name}, Role={Role}",
+                    phpUser.WorkerId, phpUser.Name, userRole);
             }
         }
         catch (Exception ex)

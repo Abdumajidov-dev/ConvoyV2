@@ -11,6 +11,8 @@ public class UserPermissionsDto
 {
     [JsonPropertyName("user_id")]
     public int UserId { get; set; }
+    [JsonPropertyName("is_active")]
+    public string IsActive { get; set; }
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;

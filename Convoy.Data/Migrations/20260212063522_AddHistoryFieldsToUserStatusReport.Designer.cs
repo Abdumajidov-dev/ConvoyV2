@@ -3,6 +3,7 @@ using System;
 using Convoy.Data.DbContexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Convoy.Data.Migrations
 {
     [DbContext(typeof(AppDbConText))]
-    partial class AppDbConTextModelSnapshot : ModelSnapshot
+    [Migration("20260212063522_AddHistoryFieldsToUserStatusReport")]
+    partial class AddHistoryFieldsToUserStatusReport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -355,6 +358,71 @@ namespace Convoy.Data.Migrations
                     b.ToTable("users");
                 });
 
+            modelBuilder.Entity("Convoy.Domain.Entities.UserStatusHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AdditionalInfo")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("additional_info");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delete_at");
+
+                    b.Property<DateTime?>("LastLocationTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_location_time");
+
+                    b.Property<bool>("NotificationSent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notification_sent");
+
+                    b.Property<int?>("NotificationThreshold")
+                        .HasColumnType("integer")
+                        .HasColumnName("notification_threshold");
+
+                    b.Property<int>("OfflineDurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("offline_duration_minutes");
+
+                    b.Property<string>("StatusChangeType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status_change_type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("StatusChangeType");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("user_status_history");
+                });
+
             modelBuilder.Entity("Convoy.Domain.Entities.UserStatusReport", b =>
                 {
                     b.Property<long>("Id")
@@ -534,6 +602,17 @@ namespace Convoy.Data.Migrations
                 });
 
             modelBuilder.Entity("Convoy.Domain.Entities.TokenBlacklist", b =>
+                {
+                    b.HasOne("Convoy.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Convoy.Domain.Entities.UserStatusHistory", b =>
                 {
                     b.HasOne("Convoy.Domain.Entities.User", "User")
                         .WithMany()

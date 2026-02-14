@@ -52,16 +52,122 @@ public class UserService : IUserService
                 (u.Phone != null && u.Phone.Contains(query.SearchTerm)));
         }
 
-        // IsActive filter
-        if (query.IsActive.HasValue)
+        // IsActive filter (string: "true", "false", null)
+        bool? isActiveFilter = null;
+        if (!string.IsNullOrWhiteSpace(query.IsActive))
         {
-            usersQuery = usersQuery.Where(u => u.IsActive == query.IsActive.Value);
+            if (query.IsActive.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                isActiveFilter = true;
+                usersQuery = usersQuery.Where(u => u.IsActive == true);
+            }
+            else if (query.IsActive.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                isActiveFilter = false;
+                usersQuery = usersQuery.Where(u => u.IsActive == false);
+            }
+            // null bo'lsa barcha userlar (filter qo'llanmaydi)
         }
 
         // BranchGuid filter
         if (!string.IsNullOrWhiteSpace(query.BranchGuid))
         {
             usersQuery = usersQuery.Where(u => u.BranchGuid == query.BranchGuid);
+        }
+
+        // is_stopped filter (string: "true", "false", null)
+        bool? isStoppedFilter = null;
+        if (!string.IsNullOrWhiteSpace(query.IsStopped))
+        {
+            if (query.IsStopped.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                isStoppedFilter = true;
+            }
+            else if (query.IsStopped.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                isStoppedFilter = false;
+            }
+            // null bo'lsa barcha userlar (filter qo'llanmaydi)
+        }
+
+        // is_stopped filter - GetFilteredUserIdsAsync'dan foydalanish
+        if (isStoppedFilter.HasValue)
+        {
+            // Parse date (default: bugungi kun)
+            DateTime checkDate = DateTime.UtcNow.Date; // Default: bugun
+            if (!string.IsNullOrWhiteSpace(query.Date))
+            {
+                try
+                {
+                    checkDate = query.Date.ParseToApplicationTime();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse date: {Date}, using today", query.Date);
+                }
+            }
+
+            // Time range filtering
+            DateTime? startDateTime = null;
+            DateTime? endDateTime = null;
+
+            if (!string.IsNullOrWhiteSpace(query.StartHour))
+            {
+                try
+                {
+                    var timeParts = query.StartHour.Split(':');
+                    if (timeParts.Length == 2)
+                    {
+                        var hour = int.Parse(timeParts[0]);
+                        var minute = int.Parse(timeParts[1]);
+                        startDateTime = new DateTime(checkDate.Year, checkDate.Month, checkDate.Day, hour, minute, 0, DateTimeKind.Utc);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse start_hour: {StartHour}", query.StartHour);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.EndHour))
+            {
+                try
+                {
+                    var timeParts = query.EndHour.Split(':');
+                    if (timeParts.Length == 2)
+                    {
+                        var hour = int.Parse(timeParts[0]);
+                        var minute = int.Parse(timeParts[1]);
+                        endDateTime = new DateTime(checkDate.Year, checkDate.Month, checkDate.Day, hour, minute, 0, DateTimeKind.Utc);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse end_hour: {EndHour}", query.EndHour);
+                }
+            }
+
+            // GetFilteredUserIdsAsync orqali to'xtab turgan/harakat qilayotgan userlarni olish
+            var filteredUserIds = await GetFilteredUserIdsAsync(
+                isActiveFilter,
+                isStoppedFilter,
+                query.MinStoppedMinutes ?? 60, // Default: 1 soat
+                checkDate,
+                startDateTime,
+                endDateTime,
+                query.BranchGuid);
+
+            if (filteredUserIds.Any())
+            {
+                // Faqat filtered userlarni qoldirish
+                var filteredUserIdsSet = filteredUserIds.ToHashSet();
+                usersQuery = usersQuery.Where(u => u.UserId.HasValue && filteredUserIdsSet.Contains((int)u.UserId.Value));
+            }
+            else
+            {
+                // Agar hech kim yo'q bo'lsa - bo'sh natija
+                usersQuery = usersQuery.Where(u => false); // Empty result
+            }
         }
 
         // Total count (har doim to'liq)
@@ -86,6 +192,7 @@ public class UserService : IUserService
             .Select(u => new UserResponseDto
             {
                 Id = u.Id,
+                UserId = (int)u.UserId,
                 Name = u.Name,
                 Phone = u.Phone,
                 BranchGuid = u.BranchGuid,
@@ -393,11 +500,11 @@ public class UserService : IUserService
 
         return userIds;
     }
-    public async Task<bool> UpdateStatusAsync(long userId,bool isActive)
+    public async Task<bool> UpdateStatusAsync(long userId, bool isActive)
     {
         try
         {
-            var result = await _userRepository.SelectAsync(u => u.Id == (long)userId);
+            var result = await _userRepository.SelectAsync(u => u.UserId == (long)userId);
             if (result is null)
                 throw new CustomException(404, "User not found");
 
@@ -406,11 +513,50 @@ public class UserService : IUserService
             await _userRepository.Update(result, result.Id);
             await _userRepository.SaveAsync();
 
+            // ✅ HISTORY: User o'zi status o'zgartirdi - yangi qator qo'shish
+            await AddUserStatusReportHistoryAsync(userId, isActive);
+
             return true;
         }
         catch(Exception)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// User is_active o'zgarganda user_status_reports table'ga yangi qator qo'shish (history)
+    /// </summary>
+    private async Task AddUserStatusReportHistoryAsync(long userId, bool isActive)
+    {
+        try
+        {
+            var statusChangeType = isActive ? "came_to_work" : "left_work";
+
+            var report = new UserStatusReport
+            {
+                UserId = userId,
+                LastLocationTime = DateTime.UtcNow,
+                LastNotifiedAt = null,
+                OfflineDurationMinutes = 0,
+                IsNotified = false,
+                NotificationCount = 0,
+                IsActive = isActive,
+                StatusChangeType = statusChangeType,
+                Note = null,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.UserStatusReports.Add(report);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "📝 User status history added: UserId={UserId}, IsActive={IsActive}, Type={Type}",
+                userId, isActive, statusChangeType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding user status report history for UserId={UserId}", userId);
         }
     }
 
@@ -438,6 +584,131 @@ public class UserService : IUserService
         }
 
         return _mapper.Map<UserResponseDto>(user);
+    }
+
+    /// <summary>
+    /// Filter bo'yicha userlarni olish (is_active, is_stopped, date, time range)
+    /// Multiple users location query uchun
+    /// UserStoppedReport'larni ham hisobga oladi
+    /// </summary>
+    public async Task<List<int>> GetFilteredUserIdsAsync(
+        bool? isActive,
+        bool? isStopped,
+        int minStoppedMinutes,
+        DateTime checkDate,
+        DateTime? startTime,
+        DateTime? endTime,
+        string? branchGuid)
+    {
+        var query = _context.Users.AsQueryable();
+
+        // 1. is_active filter
+        if (isActive.HasValue)
+        {
+            query = query.Where(u => u.IsActive == isActive.Value);
+        }
+
+        // 2. branch_guid filter
+        if (!string.IsNullOrWhiteSpace(branchGuid))
+        {
+            query = query.Where(u => u.BranchGuid == branchGuid);
+        }
+
+        var users = await query.ToListAsync();
+        var userIds = users.Select(u => (int)u.UserId!).ToList();
+
+        // 3. is_stopped filter (to'xtab turgan userlar)
+        if (isStopped.HasValue && userIds.Any())
+        {
+            // User status reports'dan so'nggi location vaqtini olish
+            var longUserIds = userIds.Select(id => (long)id).ToList();
+            var userStatusReports = await _context.UserStatusReports
+                .Where(usr => longUserIds.Contains(usr.UserId))
+                .ToListAsync();
+
+            // Aktiv stopped report'larga ega userlarni olish
+            var usersWithStoppedReports = await _context.UserStoppedReports
+                .Where(r => userIds.Contains(r.UserId) && !r.IsResolved)
+                .Select(r => r.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            var stoppedUserIds = new List<int>();
+
+            foreach (var userId in userIds)
+            {
+                // Birinchi stopped report'ni tekshirish
+                var hasActiveStoppedReport = usersWithStoppedReports.Contains(userId);
+
+                var statusReport = userStatusReports.FirstOrDefault(usr => usr.UserId == (long)userId);
+
+                if (statusReport != null && statusReport.LastLocationTime.HasValue)
+                {
+                    var lastLocationTime = statusReport.LastLocationTime.Value;
+
+                    // Time range filter (agar start_hour va end_hour berilgan bo'lsa)
+                    if (startTime.HasValue || endTime.HasValue)
+                    {
+                        // Faqat berilgan soat oralig'idagi locationlarni tekshirish
+                        if (startTime.HasValue && lastLocationTime < startTime.Value)
+                        {
+                            continue; // Bu user soat oralig'ida emas
+                        }
+
+                        if (endTime.HasValue && lastLocationTime > endTime.Value)
+                        {
+                            continue; // Bu user soat oralig'ida emas
+                        }
+                    }
+
+                    var offlineDuration = (DateTime.UtcNow - lastLocationTime).TotalMinutes;
+
+                    if (isStopped.Value)
+                    {
+                        // is_stopped = true: faqat to'xtab turganlar
+                        // 1. Offline >= minStoppedMinutes
+                        // 2. Yoki aktiv stopped report bor
+                        if (offlineDuration >= minStoppedMinutes || hasActiveStoppedReport)
+                        {
+                            stoppedUserIds.Add(userId);
+                        }
+                    }
+                    else
+                    {
+                        // is_stopped = false: faqat harakat qilayotganlar
+                        // 1. Offline < minStoppedMinutes
+                        // 2. Va aktiv stopped report yo'q
+                        if (offlineDuration < minStoppedMinutes && !hasActiveStoppedReport)
+                        {
+                            stoppedUserIds.Add(userId);
+                        }
+                    }
+                }
+                else
+                {
+                    // Agar status report yo'q bo'lsa
+                    if (isStopped.Value)
+                    {
+                        // Stopped deb hisoblash (hech qachon location yubormagan yoki stopped report bor)
+                        stoppedUserIds.Add(userId);
+                    }
+                    else if (!hasActiveStoppedReport)
+                    {
+                        // Harakat qilayotgan deb hisoblash (agar stopped report yo'q bo'lsa)
+                        stoppedUserIds.Add(userId);
+                    }
+                }
+            }
+
+            userIds = stoppedUserIds;
+        }
+
+        _logger.LogInformation(
+            "Filtered users: is_active={IsActive}, is_stopped={IsStopped}, min_stopped={MinStopped}min, " +
+            "date={Date}, start_time={StartTime}, end_time={EndTime}, branch={Branch}, result_count={Count}",
+            isActive, isStopped, minStoppedMinutes, checkDate, startTime, endTime, branchGuid, userIds.Count);
+
+        return userIds;
     }
 
     /// <summary>
@@ -469,7 +740,7 @@ public class UserService : IUserService
         existingUser.Phone = user.Phone;
         existingUser.WorkerGuid = user.WorkerGuid;
         existingUser.BranchGuid = user.BranchGuid;
-        //existingUser.PositionId = user.PositionId;
+        existingUser.PositionId = user.PositionId;
         existingUser.Image = user.Image;
         existingUser.IsActive = user.IsActive;
 
@@ -519,5 +790,11 @@ public class UserService : IUserService
             _logger.LogError(ex, "Error updating active status for user_id={UserId}", userId);
             throw;
         }
+    }
+
+    public Task<PaginatedResponse<UserResponseDto>> ActiveOrNoActiveUsers()
+    {
+
+        throw new NotImplementedException();
     }
 }

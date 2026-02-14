@@ -17,11 +17,13 @@ public class LocationService : ILocationService
     private readonly ILocationRepository _locationRepository;
     private readonly IMapper _mapper;
     private readonly ILogger<LocationService> _logger;
+    private readonly IRepository<User> _userRepository;
     private readonly object? _locationHubContext;
     private readonly ITelegramService? _telegramService;
     private readonly LocationClusteringService _clusteringService;
 
     public LocationService(
+        IRepository<User> userRepository,
         ILocationRepository locationRepository,
         IMapper mapper,
         ILogger<LocationService> logger,
@@ -30,6 +32,7 @@ public class LocationService : ILocationService
         ITelegramService? telegramService = null)
     {
         _locationRepository = locationRepository;
+        _userRepository = userRepository;
         _mapper = mapper;
         _logger = logger;
         _clusteringService = clusteringService;
@@ -207,9 +210,10 @@ public class LocationService : ILocationService
             {
                 try
                 {
+                    var user = await _userRepository.SelectAsync(u => u.UserId == userId);
                     await _telegramService.SendLocationDataAsync(
                         userId,
-                        $"User {userId}",
+                        $"User {user.Name}",
                         double.Parse(responseDto.Latitude.ToString()),
                         double.Parse(responseDto.Longitude.ToString()),
                         responseDto.RecordedAt
@@ -471,43 +475,107 @@ public class LocationService : ILocationService
 
             List<int> userIds;
 
-            // user_ids, branch_guid yoki barcha userlar bo'yicha userlarni aniqlash
+            // FILTER PRIORITY:
+            // 1. Agar user_ids berilgan bo'lsa - faqat shu userlar, lekin filterlar qo'llaniladi
+            // 2. Agar user_ids yo'q bo'lsa - filterlar bo'yicha barcha userlar tanlanadi
+
+            // Parse time range if provided
+            DateTime? startDateTime = null;
+            DateTime? endDateTime = null;
+
+            if (!string.IsNullOrWhiteSpace(query.StartTime))
+            {
+                try
+                {
+                    var timeParts = query.StartTime.Split(':');
+                    if (timeParts.Length == 2)
+                    {
+                        var hour = int.Parse(timeParts[0]);
+                        var minute = int.Parse(timeParts[1]);
+                        startDateTime = new DateTime(parsedDate.Year, parsedDate.Month, parsedDate.Day, hour, minute, 0, DateTimeKind.Utc);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse start_hour: {StartHour}", query.StartTime);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.EndTime))
+            {
+                try
+                {
+                    var timeParts = query.EndTime.Split(':');
+                    if (timeParts.Length == 2)
+                    {
+                        var hour = int.Parse(timeParts[0]);
+                        var minute = int.Parse(timeParts[1]);
+                        endDateTime = new DateTime(parsedDate.Year, parsedDate.Month, parsedDate.Day, hour, minute, 0, DateTimeKind.Utc);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse end_hour: {EndHour}", query.EndTime);
+                }
+            }
+
             if (query.UserIds != null && query.UserIds.Any())
             {
-                // user_ids berilgan - to'g'ridan-to'g'ri ishlatish
-                userIds = query.UserIds;
-                _logger.LogInformation("Using provided user_ids: {UserIds}", string.Join(",", userIds));
-            }
-            else if (!string.IsNullOrWhiteSpace(query.BranchGuid))
-            {
-                // branch_guid berilgan - branch'ga tegishli userlarni topish
-                userIds = await userService.GetUserIdsByBranchGuidAsync(query.BranchGuid);
+                // user_ids berilgan - bu userlarni filterlar bilan tekshirish
+                _logger.LogInformation("Provided user_ids: {UserIds}, applying filters...", string.Join(",", query.UserIds));
 
-                if (!userIds.Any())
+                // Agar filterlar mavjud bo'lsa, shu user_ids ichidan filter qilish
+                if (query.IsActive.HasValue || query.IsStopped.HasValue)
                 {
-                    _logger.LogWarning("No users found for BranchGuid={BranchGuid}", query.BranchGuid);
-                    return ServiceResult<IEnumerable<UserWithLocationsDto>>.Ok(
-                        Enumerable.Empty<UserWithLocationsDto>(),
-                        $"BranchGuid={query.BranchGuid} uchun userlar topilmadi");
-                }
+                    // GetFilteredUserIdsAsync barcha userlardan filterlar bo'yicha tanlaydi
+                    var allFilteredUserIds = await userService.GetFilteredUserIdsAsync(
+                        query.IsActive,
+                        query.IsStopped,
+                        query.MinStoppedMinutes ?? 60, // Default: 1 soat
+                        parsedDate,
+                        startDateTime,
+                        endDateTime,
+                        query.BranchGuid);
 
-                _logger.LogInformation("Found {Count} users for BranchGuid={BranchGuid}", userIds.Count, query.BranchGuid);
+                    // Faqat provided user_ids va filtered user_ids kesishmasini olish
+                    userIds = query.UserIds.Intersect(allFilteredUserIds).ToList();
+
+                    _logger.LogInformation(
+                        "After filtering: {Count}/{Total} users matched (is_active={IsActive}, is_stopped={IsStopped})",
+                        userIds.Count, query.UserIds.Count, query.IsActive, query.IsStopped);
+                }
+                else
+                {
+                    // Filterlar yo'q - faqat user_ids
+                    userIds = query.UserIds;
+                    _logger.LogInformation("Using provided user_ids without filters: {Count} users", userIds.Count);
+                }
             }
             else
             {
-                // Ikkalasi ham null - BARCHA active userlarni olish
-                var allUsers = await userService.GetAllActiveUsersAsync();
-                userIds = allUsers.Select(u => (int)u.UserId).ToList();
+                // user_ids berilmagan - filterlar bo'yicha BARCHA userlarni tanlash
+                _logger.LogInformation(
+                    "No user_ids provided, filtering all users: is_active={IsActive}, is_stopped={IsStopped}, branch={Branch}",
+                    query.IsActive, query.IsStopped, query.BranchGuid);
+
+                userIds = await userService.GetFilteredUserIdsAsync(
+                    query.IsActive,
+                    query.IsStopped,
+                    query.MinStoppedMinutes ?? 60, // Default: 1 soat
+                    parsedDate,
+                    startDateTime,
+                    endDateTime,
+                    query.BranchGuid);
 
                 if (!userIds.Any())
                 {
-                    _logger.LogWarning("No active users found in database");
+                    _logger.LogWarning("No users found matching filters");
                     return ServiceResult<IEnumerable<UserWithLocationsDto>>.Ok(
                         Enumerable.Empty<UserWithLocationsDto>(),
-                        "Active userlar topilmadi");
+                        "Filterlar bo'yicha userlar topilmadi");
                 }
 
-                _logger.LogInformation("Fetching locations for ALL {Count} active users", userIds.Count);
+                _logger.LogInformation("Found {Count} users matching filters", userIds.Count);
             }
 
             // Bir kunlik oraliq: parsedDate kunining 00:00:00 dan 23:59:59 gacha
@@ -577,23 +645,42 @@ public class LocationService : ILocationService
             }
 
             // Filter info uchun message
-            string filterInfo;
+            var filterParts = new List<string>();
+
             if (query.UserIds != null && query.UserIds.Any())
             {
-                filterInfo = $"{userIds.Count} ta user (user_ids)";
+                filterParts.Add($"user_ids={query.UserIds.Count}");
             }
-            else if (!string.IsNullOrWhiteSpace(query.BranchGuid))
+
+            if (!string.IsNullOrWhiteSpace(query.BranchGuid))
             {
-                filterInfo = $"{userIds.Count} ta user (branch_guid={query.BranchGuid})";
+                filterParts.Add($"branch={query.BranchGuid}");
             }
-            else
+
+            if (query.IsActive.HasValue)
             {
-                filterInfo = $"BARCHA {userIds.Count} ta active user";
+                filterParts.Add($"is_active={query.IsActive.Value}");
             }
+
+            if (query.IsStopped.HasValue)
+            {
+                var stoppedText = query.IsStopped.Value ? "to'xtab turgan" : "harakat qilayotgan";
+                filterParts.Add($"{stoppedText} ({query.MinStoppedMinutes ?? 20}min)");
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.StartTime) && !string.IsNullOrWhiteSpace(query.EndTime))
+            {
+                filterParts.Add($"soat {query.StartTime}-{query.EndTime}");
+            }
+
+            string filterInfo = filterParts.Any()
+                ? $"{userIds.Count} ta user ({string.Join(", ", filterParts)})"
+                : $"BARCHA {userIds.Count} ta user";
 
             var totalFilteredLocations = result.Sum(u => u.Locations.Count);
 
-            _logger.LogInformation("Retrieved {FilteredCount} filtered locations (cluster representatives with stopped_time) for {FilterInfo} on Date={Date}",
+            _logger.LogInformation(
+                "Retrieved {FilteredCount} filtered locations (cluster representatives with stopped_time) for {FilterInfo} on Date={Date}",
                 totalFilteredLocations, filterInfo, parsedDate.ToString("yyyy-MM-dd"));
 
             return ServiceResult<IEnumerable<UserWithLocationsDto>>.Ok(
@@ -664,9 +751,10 @@ public class LocationService : ILocationService
             {
                 try
                 {
+                    var user = await _userRepository.SelectAsync(u => u.UserId == userId);
                     await _telegramService.SendLocationDataAsync(
                         userId,
-                        $"User {userId}",
+                        $"User {user.Name}",
                         double.Parse(responseDto.Latitude.ToString()),
                         double.Parse(responseDto.Longitude.ToString()),
                         responseDto.RecordedAt

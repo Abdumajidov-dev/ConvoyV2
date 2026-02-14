@@ -447,4 +447,79 @@ public class MultipleUsersLocationQueryDto
 
     [JsonPropertyName("limit")]
     public int? Limit { get; set; } = 100;  // Har bir user uchun limit
+
+    [JsonPropertyName("is_active")]
+    public bool? IsActive { get; set; }  // User active yoki inactive (null = hammasi)
+
+    [JsonPropertyName("is_stopped")]
+    public bool? IsStopped { get; set; }  // To'xtab turgan userlarni ko'rsatish (null = hammasi)
+
+    [JsonPropertyName("min_stopped_minutes")]
+    public int? MinStoppedMinutes { get; set; }  // Kamida necha daqiqa to'xtab turgan (default: 20)
+}
+
+/// <summary>
+/// User to'xtab qolgan haqida report yaratish uchun
+/// </summary>
+public class CreateUserStoppedReportDto
+{
+    [JsonPropertyName("user_id")]
+    public int UserId { get; set; }
+
+    [JsonPropertyName("location_id")]
+    public long LocationId { get; set; }
+
+    [JsonPropertyName("latitude")]
+    public decimal Latitude { get; set; }
+
+    [JsonPropertyName("longitude")]
+    public decimal Longitude { get; set; }
+
+    [JsonPropertyName("stopped_duration_minutes")]
+    public int StoppedDurationMinutes { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// User to'xtab qolgan report'ni response qilish uchun
+/// </summary>
+public class UserStoppedReportDto
+{
+    [JsonPropertyName("id")]
+    public long Id { get; set; }
+
+    [JsonPropertyName("user_id")]
+    public int UserId { get; set; }
+
+    [JsonPropertyName("user_name")]
+    public string? UserName { get; set; }
+
+    [JsonPropertyName("location_id")]
+    public long LocationId { get; set; }
+
+    [JsonPropertyName("latitude")]
+    public decimal Latitude { get; set; }
+
+    [JsonPropertyName("longitude")]
+    public decimal Longitude { get; set; }
+
+    [JsonPropertyName("stopped_at")]
+    public DateTime StoppedAt { get; set; }
+
+    [JsonPropertyName("stopped_duration_minutes")]
+    public int StoppedDurationMinutes { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; } = string.Empty;
+
+    [JsonPropertyName("is_resolved")]
+    public bool IsResolved { get; set; }
+
+    [JsonPropertyName("resolved_at")]
+    public DateTime? ResolvedAt { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime CreatedAt { get; set; }
 }

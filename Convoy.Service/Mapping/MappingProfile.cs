@@ -23,6 +23,7 @@ public class MappingProfile : Profile
         // User mappings
         CreateMap<User, UserResponseDto>()
             .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+            .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.UserId))  // PHP API worker_id
             .ForMember(dest => dest.Name, opt => opt.MapFrom(src => src.Name))
             .ForMember(dest => dest.Phone, opt => opt.MapFrom(src => src.Phone))
             .ForMember(dest => dest.BranchGuid, opt => opt.MapFrom(src => src.BranchGuid))
@@ -44,5 +45,18 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.DeletedAt, opt => opt.Ignore())
             .ForAllMembers(opts => opts.Condition((src, dest, srcMember) => srcMember != null));
+
+        // UserStoppedReport mappings
+        CreateMap<UserStoppedReport, UserStoppedReportDto>()
+            .ForMember(dest => dest.UserName, opt => opt.Ignore());  // Service layer'da set qilinadi
+
+        CreateMap<CreateUserStoppedReportDto, UserStoppedReport>()
+            .ForMember(dest => dest.Id, opt => opt.Ignore())
+            .ForMember(dest => dest.StoppedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.IsResolved, opt => opt.Ignore())
+            .ForMember(dest => dest.ResolvedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.DeletedAt, opt => opt.Ignore());
     }
 }

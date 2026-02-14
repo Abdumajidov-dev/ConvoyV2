@@ -45,4 +45,19 @@ public interface IUserService
     /// user_id (PHP worker_id) bo'yicha topiladi
     /// </summary>
     Task SetUserActiveStatusAsync(int userId, bool isActive);
+    Task<PaginatedResponse<UserResponseDto>> ActiveOrNoActiveUsers();
+
+    /// <summary>
+    /// Filter bo'yicha userlarni olish (is_active, is_stopped, date, time range)
+    /// Multiple users location query uchun
+    /// </summary>
+    Task<List<int>> GetFilteredUserIdsAsync(
+        bool? isActive,
+        bool? isStopped,
+        int minStoppedMinutes,
+        DateTime checkDate,
+        DateTime? startTime,
+        DateTime? endTime,
+        string? branchGuid);
+
 }

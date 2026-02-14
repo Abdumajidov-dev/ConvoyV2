@@ -3,6 +3,7 @@ using System;
 using Convoy.Data.DbContexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Convoy.Data.Migrations
 {
     [DbContext(typeof(AppDbConText))]
-    partial class AppDbConTextModelSnapshot : ModelSnapshot
+    [Migration("20260211070243_CreateUserStoppedReportsTable")]
+    partial class CreateUserStoppedReportsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -372,11 +375,6 @@ namespace Convoy.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("delete_at");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active")
-                        .HasAnnotation("Relational:JsonPropertyName", "is_active");
-
                     b.Property<bool>("IsNotified")
                         .HasColumnType("boolean")
                         .HasColumnName("is_notified")
@@ -392,11 +390,6 @@ namespace Convoy.Data.Migrations
                         .HasColumnName("last_notified_at")
                         .HasAnnotation("Relational:JsonPropertyName", "last_notified_at");
 
-                    b.Property<string>("Note")
-                        .HasColumnType("text")
-                        .HasColumnName("note")
-                        .HasAnnotation("Relational:JsonPropertyName", "note");
-
                     b.Property<int>("NotificationCount")
                         .HasColumnType("integer")
                         .HasColumnName("notification_count")
@@ -406,12 +399,6 @@ namespace Convoy.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("offline_duration_minutes")
                         .HasAnnotation("Relational:JsonPropertyName", "offline_duration_minutes");
-
-                    b.Property<string>("StatusChangeType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status_change_type")
-                        .HasAnnotation("Relational:JsonPropertyName", "status_change_type");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

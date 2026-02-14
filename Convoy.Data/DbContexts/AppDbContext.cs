@@ -17,6 +17,7 @@ public class AppDbConText : DbContext
     public DbSet<UserStatusReport> UserStatusReports { get; set; }
     public DbSet<DeviceToken> DeviceTokens { get; set; }
     public DbSet<AdminNotification> AdminNotifications { get; set; }
+    public DbSet<UserStoppedReport> UserStoppedReports { get; set; }
 
     // Location uchun DbSet YO'Q - u Dapper bilan ishlaydi
 
@@ -30,6 +31,24 @@ public class AppDbConText : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Phone).HasMaxLength(20);
+        });
+        modelBuilder.Entity<UserStoppedReport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.LocationId).IsRequired();
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(500);
+
+            // Indexlar
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.LocationId);
+            entity.HasIndex(e => e.CreatedAt);
+
+            // NOTE: No foreign key relationship
+            // UserId stores PHP API worker_id (int), not database User.Id (long)
+            // Database-level FK constraint yo'q, faqat application level relationship
         });
 
         // OtpCode entity configuration
