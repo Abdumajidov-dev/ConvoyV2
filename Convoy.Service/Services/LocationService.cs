@@ -39,7 +39,93 @@ public class LocationService : ILocationService
         _locationHubContext = locationHubContext;
         _telegramService = telegramService;
     }
+    public async Task<ServiceResult<IList<LocationResponseDto>>>
+        CreateUserLocationsAsync(int userId, IList<LocationDataDto> locationsData)
+    {
+        try
+        {
+            if (locationsData == null || !locationsData.Any())
+                return ServiceResult<IList<LocationResponseDto>>
+                    .BadRequest("Locations data bo'sh bo'lmasligi kerak");
 
+            var orderedLocations = locationsData
+                .OrderBy(x => x.RecordedAt)
+                .ToList();
+
+            // Oldingi oxirgi location
+            var lastLocations = await _locationRepository
+                .GetLastLocationsAsync(userId, 1);
+
+            var previousLocation = lastLocations.FirstOrDefault();
+
+            var newLocations = new List<Location>();
+
+            foreach (var locationData in orderedLocations)
+            {
+                if (!locationData.RecordedAt.HasValue)
+                    throw new CustomException(400, "RecordedAt majburiy");
+
+                var recordedAtUtc = locationData.RecordedAt.Value
+                    .ToApplicationTime();
+
+                decimal? distanceFromPrevious = null;
+
+                if (previousLocation != null)
+                {
+                    var distance = _locationRepository.CalculateDistance(
+                        previousLocation.Latitude,
+                        previousLocation.Longitude,
+                        locationData.Latitude,
+                        locationData.Longitude
+                    );
+
+                    distanceFromPrevious = (decimal)distance;
+                }
+
+                var location = new Location
+                {
+                    UserId = userId,
+                    RecordedAt = recordedAtUtc,
+                    Latitude = locationData.Latitude,
+                    Longitude = locationData.Longitude,
+                    DistanceFromPrevious = distanceFromPrevious,
+                    CreatedAt = DateTimeExtensions.NowInApplicationTime()
+                };
+
+                newLocations.Add(location);
+
+                // Keyingi hisob uchun previous yangilanadi
+                previousLocation = location;
+            }
+
+            // 🔥 MUHIM: bulk insert
+            await _locationRepository.BulkInsertAsync(newLocations);
+
+            var response = _mapper
+                .Map<IList<LocationResponseDto>>(newLocations);
+
+            // SignalR – batch broadcast
+            if (_locationHubContext != null)
+            {
+                dynamic hubContext = _locationHubContext;
+
+                await hubContext.Clients
+                    .Group($"user_{userId}")
+                    .SendAsync("LocationsUpdated", response);
+            }
+
+            return ServiceResult<IList<LocationResponseDto>>
+                .Created(response, "Locations muvaffaqiyatli yaratildi");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error creating bulk locations for UserId={UserId}", userId);
+
+            return ServiceResult<IList<LocationResponseDto>>
+                .ServerError("Locations yaratishda xatolik yuz berdi");
+        }
+    }
 
     /// <summary>
     /// Bitta user uchun bitta location yaratish (userId controller'dan, location data body'dan)
@@ -773,6 +859,113 @@ public class LocationService : ILocationService
             _logger.LogError(ex, "Error creating location for UserId={UserId}", userId);
             return ServiceResult<LocationResponseDto>.ServerError(
                 "Location yaratishda xatolik yuz berdi");
+        }
+    }
+
+    public async Task<ServiceResult<IList<LocationResponseDto>>>
+        CreateUserLocationsAsync(int userId, IList<ForTest> locationsData)
+    {
+        try
+        {
+            if (locationsData == null || !locationsData.Any())
+                return ServiceResult<IList<LocationResponseDto>>
+                    .BadRequest("Locations ro'yxati bo'sh");
+
+            // RecordedAt bo‘yicha tartiblash
+            var ordered = locationsData
+                .OrderBy(x => x.RecordedAt)
+                .ToList();
+
+            // Oxirgi mavjud location
+            var lastLocations = await _locationRepository
+                .GetLastLocationsAsync(userId, 1);
+
+            var previousLocation = lastLocations.FirstOrDefault();
+
+            var newLocations = new List<Location>();
+
+            foreach (var item in ordered)
+            {
+                var recordedAtUtc = item.RecordedAt.ToApplicationTime();
+
+                decimal? distanceFromPrevious = null;
+
+                if (previousLocation != null)
+                {
+                    var distance = _locationRepository.CalculateDistance(
+                        previousLocation.Latitude,
+                        previousLocation.Longitude,
+                        item.Latitude,
+                        item.Longitude
+                    );
+
+                    distanceFromPrevious = (decimal)distance;
+                }
+
+                var location = new Location
+                {
+                    UserId = userId,
+                    RecordedAt = recordedAtUtc,
+                    Latitude = item.Latitude,
+                    Longitude = item.Longitude,
+                    Speed = item.Speed,
+                    DistanceFromPrevious = distanceFromPrevious,
+                    CreatedAt = DateTimeExtensions.NowInApplicationTime()
+                };
+
+                newLocations.Add(location);
+
+                // keyingi aylanish uchun previous yangilanadi
+                previousLocation = location;
+            }
+
+            // 🔥 Bulk insert
+            var ids = await _locationRepository.BulkInsertAsync(newLocations);
+
+            for (int i = 0; i < newLocations.Count; i++)
+            {
+                newLocations[i].Id = ids[i];
+            }
+
+            var response = _mapper
+                .Map<IList<LocationResponseDto>>(newLocations);
+
+            // Telegram faqat oxirgi location uchun
+            if (_telegramService != null && response.Any())
+            {
+                try
+                {
+                    var last = response.Last();
+                    var user = await _userRepository
+                        .SelectAsync(u => u.UserId == userId);
+
+                    await _telegramService.SendLocationDataAsync(
+                        userId,
+                        $"User {user.Name}",
+                        double.Parse(last.Latitude.ToString()),
+                        double.Parse(last.Longitude.ToString()),
+                        last.RecordedAt
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to send Telegram for bulk UserId={UserId}",
+                        userId);
+                }
+            }
+
+            return ServiceResult<IList<LocationResponseDto>>
+                .Created(response, "Locations muvaffaqiyatli yaratildi");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error creating bulk locations for UserId={UserId}",
+                userId);
+
+            return ServiceResult<IList<LocationResponseDto>>
+                .ServerError("Locations yaratishda xatolik yuz berdi");
         }
     }
 }

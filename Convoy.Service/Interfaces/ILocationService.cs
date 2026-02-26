@@ -12,7 +12,8 @@ public interface ILocationService
     /// User uchun bitta location yaratish (userId JWT tokendan, location data body'dan)
     /// Body to'g'ridan-to'g'ri LocationDataDto (encryption middleware yechib beradi)
     /// </summary>
-    Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, LocationDataDto locationData);
+    //Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, LocationDataDto locationData);
+    Task<ServiceResult<IList<LocationResponseDto>>> CreateUserLocationsAsync(int userId, IList<ForTest> locationData);
     Task<ServiceResult<LocationResponseDto>> CreateUserLocationAsync(int userId, ForTest locationData);
 
     /// <summary>

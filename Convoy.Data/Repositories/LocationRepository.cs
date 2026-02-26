@@ -1,8 +1,10 @@
-using Convoy.Data.IRepositories;
+﻿using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Dapper;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Npgsql.Internal;
 
 namespace Convoy.Data.Repositories;
 
@@ -12,11 +14,13 @@ namespace Convoy.Data.Repositories;
 public class LocationRepository : ILocationRepository
 {
     private readonly NpgsqlConnection _connection;
+    private readonly string _connectionString;
     private readonly ILogger<LocationRepository> _logger;
 
-    public LocationRepository(NpgsqlConnection connection, ILogger<LocationRepository> logger)
+    public LocationRepository(IConfiguration configuration,NpgsqlConnection connection, ILogger<LocationRepository> logger)
     {
         _connection = connection;
+        _connectionString = configuration.GetConnectionString("DefaultConnection");
         _logger = logger;
     }
 
@@ -498,6 +502,64 @@ public class LocationRepository : ILocationRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting locations for multiple users (UserIds={UserIds})", string.Join(",", userIds));
+            throw;
+        }
+    }
+    public async Task<IList<long>> BulkInsertAsync(IList<Location> locations)
+    {
+        if (locations == null || !locations.Any())
+            return new List<long>();
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            // 1️⃣ Temporary table yarating (faqat session ichida)
+            await connection.ExecuteAsync(@"
+            CREATE TEMP TABLE locations_tmp (
+                user_id int,
+                recorded_at timestamp,
+                latitude numeric,
+                longitude numeric,
+                speed numeric,
+                created_at timestamp
+            ) ON COMMIT DROP;
+        ", transaction: transaction);
+
+            // 2️⃣ COPY BINARY bilan tez yozish
+            await using (var writer = connection.BeginBinaryImport(
+                "COPY locations_tmp (user_id, recorded_at, latitude, longitude, speed, created_at) FROM STDIN (FORMAT BINARY)"))
+            {
+                foreach (var loc in locations)
+                {
+                    writer.StartRow();
+                    writer.Write(loc.UserId, NpgsqlTypes.NpgsqlDbType.Integer);
+                    writer.Write(loc.RecordedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                    writer.Write(loc.Latitude, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.Longitude, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.Speed ?? 0, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(DateTime.UtcNow, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                }
+                await writer.CompleteAsync();
+            }
+
+            // 3️⃣ Temporary table’dan original table’ga yozish va IDs olish
+            var ids = (await connection.QueryAsync<long>(
+                @"INSERT INTO locations (user_id, recorded_at, latitude, longitude, speed, created_at)
+              SELECT user_id, recorded_at, latitude, longitude, speed, created_at
+              FROM locations_tmp
+              RETURNING id;",
+                transaction: transaction
+            )).ToList();
+
+            await transaction.CommitAsync();
+            return ids;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
             throw;
         }
     }

@@ -18,6 +18,7 @@ public class AppDbConText : DbContext
     public DbSet<DeviceToken> DeviceTokens { get; set; }
     public DbSet<AdminNotification> AdminNotifications { get; set; }
     public DbSet<UserStoppedReport> UserStoppedReports { get; set; }
+    public DbSet<DailyDistanceReport> DailyDistanceReports { get; set; }
 
     // Location uchun DbSet YO'Q - u Dapper bilan ishlaydi
 
@@ -159,6 +160,29 @@ public class AppDbConText : DbContext
                   .WithMany()
                   .HasForeignKey(an => an.AdminUserId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // DailyDistanceReport entity configuration
+        modelBuilder.Entity<DailyDistanceReport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.ReportDate).IsRequired();
+            entity.Property(e => e.TotalDistanceMeters).HasPrecision(12, 2);
+            entity.Property(e => e.TotalDistanceKm).HasPrecision(10, 2);
+
+            // Unique constraint - bir user uchun bir kunda faqat bitta hisobot
+            entity.HasIndex(e => new { e.UserId, e.ReportDate }).IsUnique();
+
+            // Indexes for faster lookup
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.ReportDate);
+
+            // Foreign key
+            entity.HasOne(ddr => ddr.User)
+                  .WithMany()
+                  .HasForeignKey(ddr => ddr.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -205,7 +205,10 @@ public class LocationRequestWrapperDto
     //public FlutterLocationDto? Location { get; set; }
     public ForTest? Location { get; set; }
 }
-
+public class LocationsRequestWrapperDto
+{
+    public IList<ForTest> Locations { get; set; }
+}
 /// <summary>
 /// Location response DTO
 /// Matches Flutter Background Geolocation library model

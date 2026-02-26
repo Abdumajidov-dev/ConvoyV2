@@ -72,6 +72,7 @@ builder.Services.AddScoped<NpgsqlConnection>(sp => new NpgsqlConnection(connecti
 
 // Repositories
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
+builder.Services.AddScoped<IDailyDistanceReportRepository, DailyDistanceReportRepository>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 
 // HttpClient for PhpApiService
@@ -108,6 +109,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<Convoy.Service.Services.FireBaseService.DirectFirebaseService>(); // Firebase initialization (Singleton)
 builder.Services.AddScoped<LocationClusteringService>(); // Location clustering service
 builder.Services.AddScoped<IUserStoppedReportService, UserStoppedReportService>(); // User stopped report service
+builder.Services.AddScoped<IDailyDistanceReportService, DailyDistanceReportService>(); // Daily distance report service
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));

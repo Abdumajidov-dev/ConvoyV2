@@ -1,4 +1,4 @@
-using Convoy.Api.Models;
+﻿using Convoy.Api.Models;
 using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -102,69 +102,9 @@ public class LocationController : ControllerBase
 
         var flutter = request.Location;
 
-        // Validate coords
-        //if (flutter.Coords == null)
-        //{
-        //    return BadRequest(new ApiResponse<object>
-        //    {
-        //        Status = false,
-        //        Message = "Coords object bo'sh yoki mavjud emas",
-        //        Data = null
-        //    });
-        //}
-
         // Validate and sanitize battery level (0-100 oralig'ida bo'lishi kerak)
         int? batteryLevel = null;
-        //if (flutter.Battery?.Level != null)
-        //{
-        //    var level = flutter.Battery.Level.Value;
-        //    if (level >= 0 && level <= 100)
-        //    {
-        //        batteryLevel = level;
-        //    }
-        //    else
-        //    {
-        //        _logger.LogWarning("Invalid battery level {Level} for UserId={UserId}, setting to null", level, userId.Value);
-        //    }
-        //}
 
-        // Map Flutter format to LocationDataDto
-        //var locationData = new LocationDataDto
-        //{
-        //    // Core location from coords
-        //    Latitude = flutter.Coords.Latitude,
-        //    Longitude = flutter.Coords.Longitude,
-        //    Accuracy = flutter.Coords.Accuracy,
-        //    Speed = flutter.Coords.Speed,
-        //    Heading = flutter.Coords.Heading,
-        //    Altitude = flutter.Coords.Altitude,
-
-        //    // Extended coords
-        //    EllipsoidalAltitude = flutter.Coords.EllipsoidalAltitude,
-        //    HeadingAccuracy = flutter.Coords.HeadingAccuracy,
-        //    SpeedAccuracy = flutter.Coords.SpeedAccuracy,
-        //    AltitudeAccuracy = flutter.Coords.AltitudeAccuracy,
-
-        //    // Activity
-        //    ActivityType = flutter.Activity?.Type,
-        //    ActivityConfidence = flutter.Activity?.Confidence,
-        //    IsMoving = flutter.IsMoving,
-
-        //    // Battery (validated)
-        //    //BatteryLevel = batteryLevel,
-        //    //IsCharging = flutter.Battery?.IsCharging,
-
-        //    // Metadata
-        //    RecordedAt = flutter.RecordedAt.Value,
-        //    Timestamp = flutter.Timestamp.Value,
-        //    Age = flutter.Age,
-        //    Odometer = flutter.Odometer,
-        //    Uuid = flutter.Uuid,
-        //    Extras = flutter.Extras != null ? System.Text.Json.JsonSerializer.Serialize(flutter.Extras) : null
-        //};
-
-        //_logger.LogInformation("Creating location for UserId={UserId}, Lat={Lat}, Lon={Lon}",
-        //    userId.Value, locationData.Latitude, locationData.Longitude);
 
         var result = await _locationService.CreateUserLocationAsync(userId.Value, request.Location);
 
@@ -179,72 +119,62 @@ public class LocationController : ControllerBase
     }
 
     /// <summary>
-    /// [DEPRECATED] User location'larini olish (GET - query params)
-    /// GET /api/locations/user/{userId}?start_date=...&end_date=...&start_time=09:30&end_time=17:45
-    ///
-    /// DEPRECATED: Iltimos POST /api/locations/user/{user_id}/query endpoint'ini ishlating
-    /// </summary>
-    //[HttpGet("user/{user_id}")]
-    //[ProducesResponseType(typeof(ApiResponse<IEnumerable<LocationResponseDto>>), StatusCodes.Status200OK)]
-    //[ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    //[ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
-    //public async Task<IActionResult> GetUserLocations(
-    //    [FromRoute(Name = "user_id")] int userId,
-    //    [FromQuery(Name = "start_date")] DateTime? startDate,
-    //    [FromQuery(Name = "end_date")] DateTime? endDate,
-    //    [FromQuery(Name = "start_time")] string? startTime,
-    //    [FromQuery(Name = "end_time")] string? endTime,
-    //    [FromQuery] int? limit)
-    //{
-    //    // Vaqt formatini validatsiya qilish (HH:MM formatida bo'lishi kerak)
-    //    if (!string.IsNullOrWhiteSpace(startTime))
-    //    {
-    //        if (!IsValidTimeFormat(startTime))
-    //        {
-    //            return BadRequest(new ApiResponse<object>
-    //            {
-    //                Status = false,
-    //                Message = "start_time noto'g'ri formatda. Format: HH:MM (masalan: 09:30, 14:45)",
-    //                Data = null
-    //            });
-    //        }
-    //    }
+    /// 
+    /// Ko'p location yaratish (wrapped format, user_id JWT tokendan
+    /// <!--- Bu endpoint, Flutter'dan bir martada ko'p location yuborish uchun mo'ljallangan. -->
+    /// </Summary>
+    [HttpPost("batch")]
+    [ProducesResponseType(typeof(ApiResponse<IList<LocationResponseDto>>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> CreateLocations(
+    [FromBody] LocationsRequestWrapperDto request)
+    {
+        var userId = GetWorkerIdFromToken();
 
-    //    if (!string.IsNullOrWhiteSpace(endTime))
-    //    {
-    //        if (!IsValidTimeFormat(endTime))
-    //        {
-    //            return BadRequest(new ApiResponse<object>
-    //            {
-    //                Status = false,
-    //                Message = "end_time noto'g'ri formatda. Format: HH:MM (masalan: 17:30, 23:59)",
-    //                Data = null
-    //            });
-    //        }
-    //    }
+        if (userId == null)
+        {
+            return Unauthorized(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Token'da worker_id topilmadi yoki noto'g'ri",
+                Data = null
+            });
+        }
 
-    //    var query = new LocationQueryDto
-    //    {
-    //        UserId = userId,
-    //        StartDate = startDate,
-    //        EndDate = endDate,
-    //        StartTime = startTime,
-    //        EndTime = endTime,
-    //        Limit = limit
-    //    };
+        if (request?.Locations == null || !request.Locations.Any())
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Locations ro'yxati bo'sh",
+                Data = null
+            });
+        }
 
-    //    var result = await _locationService.GetUserLocationsAsync(query);
+        if (request.Locations.Count > 1000)
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Status = false,
+                Message = "Bir martada maksimum 1000 ta location yuborish mumkin",
+                Data = null
+            });
+        }
 
-    //    var apiResponse = new ApiResponse<IEnumerable<LocationResponseDto>>
-    //    {
-    //        Status = result.Success,
-    //        Message = result.Message,
-    //        Data = result.Data
-    //    };
+        var result = await _locationService
+            .CreateUserLocationsAsync(userId.Value, request.Locations);
 
-    //    return StatusCode(result.StatusCode, apiResponse);
-    //}
+        var apiResponse = new ApiResponse<IList<LocationResponseDto>>
+        {
+            Status = result.Success,
+            Message = result.Message,
+            Data = result.Data
+        };
 
+        return StatusCode(result.StatusCode, apiResponse);
+    }
     /// <summary>
     /// Bitta userning locationlarini olish (POST - body orqali filterlar)
     /// POST /api/locations/user/{user_id}

@@ -11,6 +11,7 @@ public interface ILocationRepository
     /// Yangi location yozish (partitioned table'ga)
     /// </summary>
     Task<long> InsertAsync(Location location);
+    Task<IList<long>> BulkInsertAsync(IList<Location> locations);
 
     /// <summary>
     /// Bir nechta location'larni batch insert - yaratilgan location'larni ID bilan qaytaradi
