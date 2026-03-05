@@ -9,42 +9,23 @@ namespace Convoy.Service.Interfaces;
 public interface IDailyDistanceReportService
 {
     /// <summary>
-    /// Foydalanuvchining ma'lum sana uchun hisobotini olish
+    /// Bitta foydalanuvchi uchun kunlik hisobotni yaratish yoki yangilash (TEST UCHUN)
     /// </summary>
-    Task<ServiceResult<DailyDistanceReportDto>> GetByUserAndDateAsync(long userId, DateTime date);
+    Task<ServiceResult<DailyDistanceReportDto>> GenerateDailyReportAsync(int userId, DateTime date);
 
     /// <summary>
-    /// Foydalanuvchining ma'lum sana oralig'idagi hisobotlarini olish
-    /// </summary>
-    Task<ServiceResult<List<DailyDistanceReportDto>>> GetByUserAndDateRangeAsync(long userId, DateTime startDate, DateTime endDate);
-
-    /// <summary>
-    /// Barcha foydalanuvchilar uchun ma'lum sana oralig'idagi hisobotlarni olish
-    /// </summary>
-    Task<ServiceResult<List<DailyDistanceReportDto>>> GetByDateRangeAsync(DateTime startDate, DateTime endDate);
-
-    /// <summary>
-    /// Ma'lum sana uchun eng ko'p masofa bosgan foydalanuvchilarni olish
-    /// </summary>
-    Task<ServiceResult<List<DailyDistanceReportDto>>> GetTopDistancesByDateAsync(DateTime date, int topCount = 10);
-
-    /// <summary>
-    /// Bitta foydalanuvchi uchun kunlik hisobotni yaratish yoki yangilash
-    /// </summary>
-    Task<ServiceResult<DailyDistanceReportDto>> GenerateDailyReportAsync(long userId, DateTime date);
-
-    /// <summary>
-    /// Barcha foydalanuvchilar uchun ma'lum sana uchun hisobotlarni yaratish
+    /// Barcha foydalanuvchilar uchun ma'lum sana uchun hisobotlarni yaratish (TEST UCHUN)
     /// </summary>
     Task<ServiceResult<List<DailyDistanceReportDto>>> GenerateDailyReportsForAllUsersAsync(DateTime date);
 
     /// <summary>
-    /// Kunlik statistikani olish
+    /// Hisobotlarni filter qilish (asosiy endpoint - Production uchun)
     /// </summary>
-    Task<ServiceResult<DailyDistanceStatisticsDto>> GetDailyStatisticsAsync(DateTime date);
+    Task<ServiceResult<List<DailyDistanceReportDto>>> GetFilteredReportsAsync(DailyDistanceReportFilterDto filter);
 
     /// <summary>
-    /// Foydalanuvchi umumiy statistikasini olish
+    /// Bugungi kun hozirgi vaqtgacha bo'lgan masofani hisoblash (REAL-TIME TEST UCHUN)
+    /// Database'ga saqlanmaydi, faqat hisoblangan natijani qaytaradi
     /// </summary>
-    Task<ServiceResult<UserDistanceSummaryDto>> GetUserSummaryAsync(long userId, DateTime startDate, DateTime endDate);
+    Task<ServiceResult<DailyDistanceReportDto>> CalculateCurrentDayDistanceAsync(int userId);
 }

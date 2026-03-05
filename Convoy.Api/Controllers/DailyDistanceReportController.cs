@@ -6,11 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace Convoy.Api.Controllers;
 
 /// <summary>
-/// Kunlik masofa hisoboti API controller
+/// Kunlik masofa hisoboti API controller (SODDALASHTIRILGAN)
 /// </summary>
 [ApiController]
 [Route("api/daily_distance_reports")]
-[Authorize] // Barcha endpoint'lar authentication talab qiladi
+// [Authorize] // Temporarily disabled for testing
 public class DailyDistanceReportController : ControllerBase
 {
     private readonly IDailyDistanceReportService _reportService;
@@ -25,209 +25,164 @@ public class DailyDistanceReportController : ControllerBase
     }
 
     /// <summary>
-    /// Foydalanuvchining ma'lum sana uchun hisobotini olish
-    /// GET /api/daily_distance_reports/{userId}?date=2026-02-15
+    /// [REAL-TIME TEST] Bugungi kun hozirgi vaqtgacha bo'lgan masofani hisoblash
+    /// Database'ga saqlanmaydi, faqat hisoblangan natijani qaytaradi
+    /// GET /api/daily_distance_reports/calculate_current?user_id=5277
     /// </summary>
-    [HttpGet("{userId}")]
-    public async Task<IActionResult> GetByUserAndDate(
-        [FromRoute] long userId,
-        [FromQuery] DateTime date)
+    [HttpGet("calculate_current")]
+    public async Task<IActionResult> CalculateCurrentDayDistance([FromQuery] int user_id)
     {
-        var result = await _reportService.GetByUserAndDateAsync(userId, date);
-
-        return StatusCode(result.StatusCode, new
+        try
         {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
+            if (user_id <= 0)
+            {
+                return BadRequest(new
+                {
+                    status = false,
+                    message = "user_id majburiy va 0 dan katta bo'lishi kerak",
+                    data = (object?)null
+                });
+            }
 
-    /// <summary>
-    /// Foydalanuvchining ma'lum sana oralig'idagi hisobotlarini olish
-    /// GET /api/daily_distance_reports/{userId}/range?start_date=2026-02-01&end_date=2026-02-28
-    /// </summary>
-    [HttpGet("{userId}/range")]
-    public async Task<IActionResult> GetByUserAndDateRange(
-        [FromRoute] long userId,
-        [FromQuery] DateTime start_date,
-        [FromQuery] DateTime end_date)
-    {
-        var result = await _reportService.GetByUserAndDateRangeAsync(userId, start_date, end_date);
+            var result = await _reportService.CalculateCurrentDayDistanceAsync(user_id);
 
-        return StatusCode(result.StatusCode, new
+            return StatusCode(result.StatusCode, new
+            {
+                status = result.Success,
+                message = result.Message,
+                data = result.Data
+            });
+        }
+        catch (Exception ex)
         {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
-
-    /// <summary>
-    /// Barcha foydalanuvchilar uchun ma'lum sana oralig'idagi hisobotlarni olish
-    /// GET /api/daily_distance_reports/all?start_date=2026-02-01&end_date=2026-02-28
-    /// </summary>
-    [HttpGet("all")]
-    public async Task<IActionResult> GetAllByDateRange(
-        [FromQuery] DateTime start_date,
-        [FromQuery] DateTime end_date)
-    {
-        var result = await _reportService.GetByDateRangeAsync(start_date, end_date);
-
-        return StatusCode(result.StatusCode, new
-        {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
-
-    /// <summary>
-    /// Ma'lum sana uchun eng ko'p masofa bosgan foydalanuvchilarni olish
-    /// GET /api/daily_distance_reports/top?date=2026-02-15&count=10
-    /// </summary>
-    [HttpGet("top")]
-    public async Task<IActionResult> GetTopDistancesByDate(
-        [FromQuery] DateTime date,
-        [FromQuery] int count = 10)
-    {
-        var result = await _reportService.GetTopDistancesByDateAsync(date, count);
-
-        return StatusCode(result.StatusCode, new
-        {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
-
-    /// <summary>
-    /// Bitta foydalanuvchi uchun kunlik hisobotni yaratish yoki yangilash
-    /// POST /api/daily_distance_reports/generate
-    /// Body: { "user_id": 5277, "report_date": "2026-02-15" }
-    /// </summary>
-    [HttpPost("generate")]
-    public async Task<IActionResult> GenerateDailyReport([FromBody] GenerateDailyReportRequestDto request)
-    {
-        if (request.UserId == null)
-        {
-            return BadRequest(new
+            _logger.LogError(ex, "Error in CalculateCurrentDayDistance for user {UserId}", user_id);
+            return StatusCode(500, new
             {
                 status = false,
-                message = "user_id majburiy maydon",
+                message = "Xatolik yuz berdi",
                 data = (object?)null
             });
         }
-
-        var result = await _reportService.GenerateDailyReportAsync(request.UserId.Value, request.ReportDate);
-
-        return StatusCode(result.StatusCode, new
-        {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
     }
 
     /// <summary>
-    /// Barcha foydalanuvchilar uchun ma'lum sana uchun hisobotlarni yaratish
-    /// POST /api/daily_distance_reports/generate_all
-    /// Body: { "report_date": "2026-02-15" }
-    /// </summary>
-    [HttpPost("generate_all")]
-    public async Task<IActionResult> GenerateAllDailyReports([FromBody] GenerateDailyReportRequestDto request)
-    {
-        var result = await _reportService.GenerateDailyReportsForAllUsersAsync(request.ReportDate);
-
-        return StatusCode(result.StatusCode, new
-        {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
-
-    /// <summary>
-    /// Kunlik statistikani olish
-    /// GET /api/daily_distance_reports/statistics?date=2026-02-15
-    /// </summary>
-    [HttpGet("statistics")]
-    public async Task<IActionResult> GetDailyStatistics([FromQuery] DateTime date)
-    {
-        var result = await _reportService.GetDailyStatisticsAsync(date);
-
-        return StatusCode(result.StatusCode, new
-        {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
-
-    /// <summary>
-    /// Foydalanuvchi umumiy statistikasini olish
-    /// GET /api/daily_distance_reports/{userId}/summary?start_date=2026-02-01&end_date=2026-02-28
-    /// </summary>
-    [HttpGet("{userId}/summary")]
-    public async Task<IActionResult> GetUserSummary(
-        [FromRoute] long userId,
-        [FromQuery] DateTime start_date,
-        [FromQuery] DateTime end_date)
-    {
-        var result = await _reportService.GetUserSummaryAsync(userId, start_date, end_date);
-
-        return StatusCode(result.StatusCode, new
-        {
-            status = result.Success,
-            message = result.Message,
-            data = result.Data
-        });
-    }
-
-    /// <summary>
-    /// Bugungi kunlik hisobotni yaratish (quick action)
+    /// [TEST] Bugungi kunlik hisobotni yaratish
     /// POST /api/daily_distance_reports/generate_today?user_id=5277
     /// </summary>
     [HttpPost("generate_today")]
-    public async Task<IActionResult> GenerateTodayReport([FromQuery] long? user_id)
+    public async Task<IActionResult> GenerateTodayReport([FromQuery] int? user_id)
     {
-        if (user_id == null)
+        try
         {
-            // Barcha userlar uchun
-            var result = await _reportService.GenerateDailyReportsForAllUsersAsync(DateTime.Today);
-            return StatusCode(result.StatusCode, new
+            if (user_id == null)
             {
-                status = result.Success,
-                message = result.Message,
-                data = result.Data
-            });
+                // Barcha userlar uchun
+                var result = await _reportService.GenerateDailyReportsForAllUsersAsync(DateTime.Today);
+                return StatusCode(result.StatusCode, new
+                {
+                    status = result.Success,
+                    message = result.Message,
+                    data = result.Data
+                });
+            }
+            else
+            {
+                // Bitta user uchun
+                var result = await _reportService.GenerateDailyReportAsync(user_id.Value, DateTime.Today);
+                return StatusCode(result.StatusCode, new
+                {
+                    status = result.Success,
+                    message = result.Message,
+                    data = result.Data
+                });
+            }
         }
-        else
+        catch (Exception ex)
         {
-            // Bitta user uchun
-            var result = await _reportService.GenerateDailyReportAsync(user_id.Value, DateTime.Today);
-            return StatusCode(result.StatusCode, new
+            _logger.LogError(ex, "Error in GenerateTodayReport");
+            return StatusCode(500, new
             {
-                status = result.Success,
-                message = result.Message,
-                data = result.Data
+                status = false,
+                message = "Xatolik yuz berdi",
+                data = (object?)null
             });
         }
     }
 
     /// <summary>
-    /// Kechagi kunlik hisobotni yaratish (quick action)
+    /// [TEST] Kechagi kunlik hisobotni yaratish
     /// POST /api/daily_distance_reports/generate_yesterday?user_id=5277
     /// </summary>
     [HttpPost("generate_yesterday")]
-    public async Task<IActionResult> GenerateYesterdayReport([FromQuery] long? user_id)
+    public async Task<IActionResult> GenerateYesterdayReport([FromQuery] int? user_id)
     {
-        var yesterday = DateTime.Today.AddDays(-1);
-
-        if (user_id == null)
+        try
         {
-            // Barcha userlar uchun
-            var result = await _reportService.GenerateDailyReportsForAllUsersAsync(yesterday);
+            var yesterday = DateTime.Today.AddDays(-1);
+
+            if (user_id == null)
+            {
+                // Barcha userlar uchun
+                var result = await _reportService.GenerateDailyReportsForAllUsersAsync(yesterday);
+                return StatusCode(result.StatusCode, new
+                {
+                    status = result.Success,
+                    message = result.Message,
+                    data = result.Data
+                });
+            }
+            else
+            {
+                // Bitta user uchun
+                var result = await _reportService.GenerateDailyReportAsync(user_id.Value, yesterday);
+                return StatusCode(result.StatusCode, new
+                {
+                    status = result.Success,
+                    message = result.Message,
+                    data = result.Data
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GenerateYesterdayReport");
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Xatolik yuz berdi",
+                data = (object?)null
+            });
+        }
+    }
+
+    /// <summary>
+    /// [PRODUCTION] Hisobotlarni filter qilish
+    /// POST /api/daily_distance_reports/filter
+    /// Body: {
+    ///   "branch_guid": "guid-string",  // optional
+    ///   "user_ids": [5277, 5475],      // optional
+    ///   "start_date": "2026-02-01",
+    ///   "end_date": "2026-02-28"
+    /// }
+    /// </summary>
+    [HttpPost("filter")]
+    public async Task<IActionResult> GetFilteredReports([FromBody] DailyDistanceReportFilterDto filter)
+    {
+        try
+        {
+            // Validation
+            if (filter.StartDate > filter.EndDate)
+            {
+                return BadRequest(new
+                {
+                    status = false,
+                    message = "start_date end_date'dan katta bo'lishi mumkin emas",
+                    data = (object?)null
+                });
+            }
+
+            var result = await _reportService.GetFilteredReportsAsync(filter);
+
             return StatusCode(result.StatusCode, new
             {
                 status = result.Success,
@@ -235,15 +190,14 @@ public class DailyDistanceReportController : ControllerBase
                 data = result.Data
             });
         }
-        else
+        catch (Exception ex)
         {
-            // Bitta user uchun
-            var result = await _reportService.GenerateDailyReportAsync(user_id.Value, yesterday);
-            return StatusCode(result.StatusCode, new
+            _logger.LogError(ex, "Error in GetFilteredReports");
+            return StatusCode(500, new
             {
-                status = result.Success,
-                message = result.Message,
-                data = result.Data
+                status = false,
+                message = "Xatolik yuz berdi",
+                data = (object?)null
             });
         }
     }

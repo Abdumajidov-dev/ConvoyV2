@@ -194,6 +194,8 @@ public class ForTest
     public decimal? Speed { get; set; }
     [JsonPropertyName("recorded_at")]
     public DateTime RecordedAt { get; set; }
+    [JsonPropertyName("mock")]
+    public bool? Mock { get; set; }
 }
 /// <summary>
 /// Wrapped location request DTO (Flutter format)

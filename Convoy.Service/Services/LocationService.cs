@@ -134,6 +134,8 @@ public class LocationService : ILocationService
     {
         try
         {
+            _logger.LogInformation("🚀 DEBUG: CreateUserLocationAsync STARTED for UserId={UserId}", userId);
+
             // RecordedAt bo'lmasa - hozirgi vaqtni set qilish
             if (!locationData.RecordedAt.HasValue)
             {
@@ -148,19 +150,35 @@ public class LocationService : ILocationService
 
             // User'ning oldingi location'ini olish (distance hisoblash uchun)
             var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
-            var previousLocation = lastLocations.FirstOrDefault();
+            var lastLocationsList = lastLocations.ToList(); // Convert to list for count
+            _logger.LogInformation("🔍 DEBUG: GetLastLocationsAsync returned {Count} locations for UserId={UserId}",
+                lastLocationsList.Count, userId);
+
+            var previousLocation = lastLocationsList.FirstOrDefault();
 
             decimal? distanceFromPrevious = null;
 
             if (previousLocation != null)
             {
+                _logger.LogInformation("🔍 Previous location found: ID={PrevId}, Lat={PrevLat}, Lon={PrevLon}, RecordedAt={PrevTime}",
+                    previousLocation.Id, previousLocation.Latitude, previousLocation.Longitude, previousLocation.RecordedAt);
+
                 var distance = _locationRepository.CalculateDistance(
                     previousLocation.Latitude,
                     previousLocation.Longitude,
                     locationData.Latitude,
                     locationData.Longitude
                 );
+
                 distanceFromPrevious = (decimal)distance;
+
+                _logger.LogInformation("📏 Distance calculated: {Distance} meters (Previous→New)", distanceFromPrevious);
+                _logger.LogInformation("📍 New location: Lat={NewLat}, Lon={NewLon}",
+                    locationData.Latitude, locationData.Longitude);
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ No previous location found for user {UserId} - this is the FIRST location (or query returned empty)", userId);
             }
 
             // Validation warnings for out-of-range values
@@ -172,6 +190,9 @@ public class LocationService : ILocationService
                 _logger.LogWarning("Heading clamped: {Original} → 999.99", locationData.Heading.Value);
             if (locationData.Age.HasValue && locationData.Age.Value > 99999999.99m)
                 _logger.LogWarning("Age clamped: {Original} → 99999999.99", locationData.Age.Value);
+
+            // DEBUG: Log the distance value before creating entity
+            _logger.LogInformation("🔢 DEBUG: distanceFromPrevious value = {Distance} (will be inserted to DB)", distanceFromPrevious);
 
             // Location entity yaratish
             var location = new Location
@@ -257,7 +278,7 @@ public class LocationService : ILocationService
                 Extras = locationData.Extras,
 
                 // Calculated fields
-                DistanceFromPrevious = 0,
+                DistanceFromPrevious = distanceFromPrevious,
                 CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
 
@@ -819,7 +840,7 @@ public class LocationService : ILocationService
                 Speed = locationData.Speed,
 
                 // Calculated fields
-                DistanceFromPrevious = 0,
+                DistanceFromPrevious = distanceFromPrevious,
                 CreatedAt = DateTimeExtensions.NowInApplicationTime()
             };
 
@@ -905,6 +926,7 @@ public class LocationService : ILocationService
                 var location = new Location
                 {
                     UserId = userId,
+                    Mock = item.Mock,
                     RecordedAt = recordedAtUtc,
                     Latitude = item.Latitude,
                     Longitude = item.Longitude,

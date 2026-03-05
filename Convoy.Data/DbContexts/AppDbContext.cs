@@ -177,12 +177,12 @@ public class AppDbConText : DbContext
             // Indexes for faster lookup
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.ReportDate);
+            entity.HasIndex(e => e.BranchGuid);
 
-            // Foreign key
-            entity.HasOne(ddr => ddr.User)
-                  .WithMany()
-                  .HasForeignKey(ddr => ddr.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
+            // NOTE: No foreign key relationship configured here because:
+            // - UserId references users.user_id (external PHP API worker_id), not users.id
+            // - users.user_id can be NULL, so FK constraint is not possible
+            // - Manual join in application layer when needed
         });
     }
 }

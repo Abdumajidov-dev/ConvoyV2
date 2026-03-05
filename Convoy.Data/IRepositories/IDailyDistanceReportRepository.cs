@@ -10,12 +10,12 @@ public interface IDailyDistanceReportRepository : IRepository<DailyDistanceRepor
     /// <summary>
     /// Foydalanuvchining ma'lum sana uchun hisobotini olish
     /// </summary>
-    Task<DailyDistanceReport?> GetByUserAndDateAsync(long userId, DateTime date);
+    Task<DailyDistanceReport?> GetByUserAndDateAsync(int userId, DateTime date);
 
     /// <summary>
     /// Foydalanuvchining ma'lum sana oralig'idagi hisobotlarini olish
     /// </summary>
-    Task<IList<DailyDistanceReport>> GetByUserAndDateRangeAsync(long userId, DateTime startDate, DateTime endDate);
+    Task<IList<DailyDistanceReport>> GetByUserAndDateRangeAsync(int userId, DateTime startDate, DateTime endDate);
 
     /// <summary>
     /// Barcha foydalanuvchilar uchun ma'lum sana oralig'idagi hisobotlarni olish
@@ -31,11 +31,25 @@ public interface IDailyDistanceReportRepository : IRepository<DailyDistanceRepor
     /// Bitta foydalanuvchi uchun kunlik hisobotni yaratish yoki yangilash
     /// PostgreSQL function dan foydalanadi: upsert_daily_distance_report
     /// </summary>
-    Task<long> UpsertDailyDistanceReportAsync(long userId, DateTime date);
+    Task<long> UpsertDailyDistanceReportAsync(int userId, DateTime date);
 
     /// <summary>
     /// Barcha foydalanuvchilar uchun ma'lum sana uchun hisobotlarni yaratish
     /// PostgreSQL function dan foydalanadi: generate_daily_reports_for_date
     /// </summary>
-    Task<IList<(long UserId, long ReportId, decimal DistanceKm)>> GenerateDailyReportsForDateAsync(DateTime date);
+    Task<IList<(int UserId, long ReportId, decimal DistanceKm)>> GenerateDailyReportsForDateAsync(DateTime date);
+
+    /// <summary>
+    /// Hisobotlarni filter qilish (branch_guid, user_ids, date range)
+    /// </summary>
+    Task<IList<DailyDistanceReport>> GetFilteredReportsAsync(
+        string? branchGuid,
+        List<int>? userIds,
+        DateTime startDate,
+        DateTime endDate);
+
+    /// <summary>
+    /// Foydalanuvchining ma'lum vaqt oralig'idagi locationlarini olish (real-time hisoblash uchun)
+    /// </summary>
+    Task<IEnumerable<Location>> GetUserLocationsForDateAsync(int userId, DateTime startDate, DateTime endDate);
 }

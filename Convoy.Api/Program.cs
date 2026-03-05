@@ -118,6 +118,7 @@ builder.Services.AddAutoMapper(typeof(Convoy.Service.Mapping.MappingProfile));
 builder.Services.AddHostedService<DatabaseInitializerService>();
 builder.Services.AddHostedService<PartitionMaintenanceService>();
 builder.Services.AddHostedService<Convoy.Service.Services.Backrounds.CheckLocationCreatedBackrounService>();
+builder.Services.AddHostedService<Convoy.Service.Services.Backrounds.DailyDistanceReportBackgroundService>();
 
 // PHP Token Authorization (JWT authentication o'chirilgan - PHP token ishlatiladi)
 // Custom authorization handler orqali PHP token'larni validate qilamiz

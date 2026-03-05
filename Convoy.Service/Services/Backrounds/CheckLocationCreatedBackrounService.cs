@@ -303,6 +303,15 @@ public class CheckLocationCreatedBackrounService : BackgroundService
     {
         try
         {
+            // VAQT CHEGARASI: Faqat 9:00 dan 19:00 gacha notification yuborish
+            var currentHour = DateTime.Now.Hour; // Local vaqt (server time zone)
+            if (currentHour < 9 || currentHour >= 19)
+            {
+                _logger.LogDebug("⏰ Notification yuborilmadi: Hozirgi vaqt {Hour}:00. Notification faqat 9:00-19:00 oralig'ida yuboriladi.",
+                    currentHour);
+                return;
+            }
+
             // Eng yaqin threshold'ni topish (20, 40, 60, 80, 100, 120)
             var threshold = _notificationThresholds
                 .Where(t => offlineDurationMinutes >= t)

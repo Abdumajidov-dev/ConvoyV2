@@ -93,7 +93,9 @@
       "Bash(cmd.exe /c \"set PGPASSWORD=GarantDockerPass&amp;&amp; psql -h 10.21.61.51 -p 5432 -U postgres -d convoydb -c \"\"SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = ''user_status_reports'' ORDER BY ordinal_position;\"\"\")",
       "Bash(cmd.exe /c \"findstr /n \"DbSet\" Convoy.Data\\DbContexts\\AppDbContext.cs\")",
       "Bash(cmd.exe /c \"dir /b /o:-d Convoy.Data\\Migrations\\*.cs | head -n 5\")",
-      "Bash(cmd.exe /c:*)"
+      "Bash(cmd.exe /c:*)",
+      "Bash(curl:*)",
+      "Bash(timeout /t 2 /nobreak)"
     ],
     "deny": [],
     "ask": []

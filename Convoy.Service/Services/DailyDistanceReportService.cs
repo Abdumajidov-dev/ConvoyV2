@@ -1,134 +1,64 @@
+using Convoy.Data.DbContexts;
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Convoy.Service.Common;
 using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Convoy.Service.Services;
 
 /// <summary>
-/// Kunlik masofa hisoboti service implementation
+/// Kunlik masofa hisoboti service implementation (YANGILANGAN)
 /// </summary>
 public class DailyDistanceReportService : IDailyDistanceReportService
 {
     private readonly IDailyDistanceReportRepository _reportRepository;
+    private readonly AppDbConText _dbContext;
     private readonly ILogger<DailyDistanceReportService> _logger;
 
     public DailyDistanceReportService(
         IDailyDistanceReportRepository reportRepository,
+        AppDbConText dbContext,
         ILogger<DailyDistanceReportService> logger)
     {
         _reportRepository = reportRepository;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
     /// <summary>
-    /// Foydalanuvchining ma'lum sana uchun hisobotini olish
+    /// Bitta foydalanuvchi uchun kunlik hisobotni yaratish yoki yangilash (TEST UCHUN)
     /// </summary>
-    public async Task<ServiceResult<DailyDistanceReportDto>> GetByUserAndDateAsync(long userId, DateTime date)
+    public async Task<ServiceResult<DailyDistanceReportDto>> GenerateDailyReportAsync(int userId, DateTime date)
     {
         try
         {
-            var report = await _reportRepository.GetByUserAndDateAsync(userId, date);
+            date = date.ToUniversalTime();
+            _logger.LogInformation("Generating daily report for external user_id {UserId} on {Date}", userId, date);
 
-            if (report == null)
+            // IMPORTANT: userId bu EXTERNAL ID (users.user_id - PHP worker_id)
+            // PostgreSQL function ham EXTERNAL ID kutadi (endi!)
+            // User'ni tekshirish uchun olish
+            var user = await _dbContext.Users
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (user == null)
             {
                 return ServiceResult<DailyDistanceReportDto>.NotFound(
-                    $"User {userId} uchun {date:yyyy-MM-dd} sanasi uchun hisobot topilmadi");
+                    $"User topilmadi: user_id={userId}");
             }
 
-            var dto = MapToDto(report);
-            return ServiceResult<DailyDistanceReportDto>.Ok(dto, "Hisobot muvaffaqiyatli olindi");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting daily report for user {UserId} on {Date}", userId, date);
-            return ServiceResult<DailyDistanceReportDto>.ServerError("Xatolik yuz berdi");
-        }
-    }
+            _logger.LogInformation("📍 User found: Name={Name}, ExternalId={ExternalId}",
+                user.Name, user.UserId);
 
-    /// <summary>
-    /// Foydalanuvchining ma'lum sana oralig'idagi hisobotlarini olish
-    /// </summary>
-    public async Task<ServiceResult<List<DailyDistanceReportDto>>> GetByUserAndDateRangeAsync(
-        long userId, DateTime startDate, DateTime endDate)
-    {
-        try
-        {
-            var reports = await _reportRepository.GetByUserAndDateRangeAsync(userId, startDate, endDate);
-
-            var dtos = reports.Select(MapToDto).ToList();
-            return ServiceResult<List<DailyDistanceReportDto>>.Ok(
-                dtos,
-                $"{dtos.Count} ta hisobot topildi");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting daily reports for user {UserId} from {StartDate} to {EndDate}",
-                userId, startDate, endDate);
-            return ServiceResult<List<DailyDistanceReportDto>>.ServerError("Xatolik yuz berdi");
-        }
-    }
-
-    /// <summary>
-    /// Barcha foydalanuvchilar uchun ma'lum sana oralig'idagi hisobotlarni olish
-    /// </summary>
-    public async Task<ServiceResult<List<DailyDistanceReportDto>>> GetByDateRangeAsync(
-        DateTime startDate, DateTime endDate)
-    {
-        try
-        {
-            var reports = await _reportRepository.GetByDateRangeAsync(startDate, endDate);
-
-            var dtos = reports.Select(MapToDto).ToList();
-            return ServiceResult<List<DailyDistanceReportDto>>.Ok(
-                dtos,
-                $"{dtos.Count} ta hisobot topildi");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting daily reports from {StartDate} to {EndDate}",
-                startDate, endDate);
-            return ServiceResult<List<DailyDistanceReportDto>>.ServerError("Xatolik yuz berdi");
-        }
-    }
-
-    /// <summary>
-    /// Ma'lum sana uchun eng ko'p masofa bosgan foydalanuvchilarni olish
-    /// </summary>
-    public async Task<ServiceResult<List<DailyDistanceReportDto>>> GetTopDistancesByDateAsync(
-        DateTime date, int topCount = 10)
-    {
-        try
-        {
-            var reports = await _reportRepository.GetTopDistancesByDateAsync(date, topCount);
-
-            var dtos = reports.Select(MapToDto).ToList();
-            return ServiceResult<List<DailyDistanceReportDto>>.Ok(
-                dtos,
-                $"Top {dtos.Count} foydalanuvchi");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting top distances for {Date}", date);
-            return ServiceResult<List<DailyDistanceReportDto>>.ServerError("Xatolik yuz berdi");
-        }
-    }
-
-    /// <summary>
-    /// Bitta foydalanuvchi uchun kunlik hisobotni yaratish yoki yangilash
-    /// </summary>
-    public async Task<ServiceResult<DailyDistanceReportDto>> GenerateDailyReportAsync(long userId, DateTime date)
-    {
-        try
-        {
-            _logger.LogInformation("Generating daily report for user {UserId} on {Date}", userId, date);
-
-            // PostgreSQL function orqali hisobot yaratish
+            // PostgreSQL function orqali hisobot yaratish (EXTERNAL ID yuborish - DIRECT!)
+            // Function: users.user_id={ExternalId} → locations.user_id={ExternalId}
             var reportId = await _reportRepository.UpsertDailyDistanceReportAsync(userId, date);
+            _logger.LogInformation("📍 Report created with ID: {ReportId}", reportId);
 
-            // Yaratilgan hisobotni olish
+            // Yaratilgan hisobotni olish (EXTERNAL ID bilan)
             var report = await _reportRepository.GetByUserAndDateAsync(userId, date);
 
             if (report == null)
@@ -137,8 +67,8 @@ public class DailyDistanceReportService : IDailyDistanceReportService
                     "Hisobot yaratildi lekin qayta o'qishda xatolik yuz berdi");
             }
 
-            var dto = MapToDto(report);
-            _logger.LogInformation("Daily report generated successfully for user {UserId}: {DistanceKm} km",
+            var dto = MapToDto(report, user);
+            _logger.LogInformation("Daily report generated successfully for user {ExternalUserId}: {DistanceKm} km",
                 userId, dto.TotalDistanceKm);
 
             return ServiceResult<DailyDistanceReportDto>.Ok(dto, "Hisobot muvaffaqiyatli yaratildi");
@@ -151,7 +81,7 @@ public class DailyDistanceReportService : IDailyDistanceReportService
     }
 
     /// <summary>
-    /// Barcha foydalanuvchilar uchun ma'lum sana uchun hisobotlarni yaratish
+    /// Barcha foydalanuvchilar uchun ma'lum sana uchun hisobotlarni yaratish (TEST UCHUN)
     /// </summary>
     public async Task<ServiceResult<List<DailyDistanceReportDto>>> GenerateDailyReportsForAllUsersAsync(DateTime date)
     {
@@ -166,7 +96,15 @@ public class DailyDistanceReportService : IDailyDistanceReportService
 
             // Yaratilgan hisobotlarni olish
             var reports = await _reportRepository.GetByDateRangeAsync(date, date);
-            var dtos = reports.Select(MapToDto).ToList();
+
+            // User ma'lumotlarini bir marta olish (performance uchun)
+            // IMPORTANT: reports.UserId bu EXTERNAL ID (users.user_id) - UPDATED!
+            var externalUserIds = reports.Select(r => r.UserId).Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+            var users = await _dbContext.Users
+                .Where(u => u.UserId.HasValue && externalUserIds.Contains(u.UserId.Value))
+                .ToDictionaryAsync(u => u.UserId!.Value, u => u);
+
+            var dtos = reports.Select(r => MapToDto(r, users.GetValueOrDefault(r.UserId ?? 0))).ToList();
 
             return ServiceResult<List<DailyDistanceReportDto>>.Ok(
                 dtos,
@@ -181,104 +119,147 @@ public class DailyDistanceReportService : IDailyDistanceReportService
     }
 
     /// <summary>
-    /// Kunlik statistikani olish
+    /// Hisobotlarni filter qilish (ASOSIY ENDPOINT - PRODUCTION UCHUN)
     /// </summary>
-    public async Task<ServiceResult<DailyDistanceStatisticsDto>> GetDailyStatisticsAsync(DateTime date)
+    public async Task<ServiceResult<List<DailyDistanceReportDto>>> GetFilteredReportsAsync(DailyDistanceReportFilterDto filter)
     {
         try
         {
-            var reports = await _reportRepository.GetByDateRangeAsync(date, date);
+            _logger.LogInformation("Getting filtered reports: BranchGuid={BranchGuid}, UserIds={UserIds}, StartDate={StartDate}, EndDate={EndDate}",
+                filter.BranchGuid, string.Join(",", filter.UserIds ?? new List<int>()), filter.StartDate, filter.EndDate);
+
+            // Repository orqali filter qilish
+            var reports = await _reportRepository.GetFilteredReportsAsync(
+                filter.BranchGuid,
+                filter.UserIds,
+                filter.StartDate,
+                filter.EndDate);
 
             if (!reports.Any())
             {
-                return ServiceResult<DailyDistanceStatisticsDto>.NotFound(
-                    $"{date:yyyy-MM-dd} sanasi uchun hisobotlar topilmadi");
+                return ServiceResult<List<DailyDistanceReportDto>>.Ok(
+                    new List<DailyDistanceReportDto>(),
+                    "Hisobotlar topilmadi");
             }
 
-            var statistics = new DailyDistanceStatisticsDto
-            {
-                Date = date,
-                TotalUsers = reports.Count,
-                TotalDistanceKm = reports.Sum(r => r.TotalDistanceKm),
-                AverageDistanceKm = reports.Average(r => r.TotalDistanceKm),
-                MaxDistanceKm = reports.Max(r => r.TotalDistanceKm),
-                MinDistanceKm = reports.Min(r => r.TotalDistanceKm)
-            };
+            // User ma'lumotlarini bir marta olish (performance uchun)
+            // IMPORTANT: reports.UserId bu EXTERNAL ID (users.user_id) - UPDATED!
+            var externalUserIds = reports.Select(r => r.UserId).Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+            var users = await _dbContext.Users
+                .Where(u => u.UserId.HasValue && externalUserIds.Contains(u.UserId.Value))
+                .ToDictionaryAsync(u => u.UserId!.Value, u => u);
 
-            var topUser = reports.OrderByDescending(r => r.TotalDistanceKm).FirstOrDefault();
-            if (topUser?.User != null)
-            {
-                statistics.TopUserName = topUser.User.Name;
-                statistics.TopUserDistanceKm = topUser.TotalDistanceKm;
-            }
+            var dtos = reports.Select(r => MapToDto(r, users.GetValueOrDefault(r.UserId ?? 0))).ToList();
 
-            return ServiceResult<DailyDistanceStatisticsDto>.Ok(
-                statistics,
-                "Statistika muvaffaqiyatli hisoblandi");
+            _logger.LogInformation("Found {Count} filtered reports", dtos.Count);
+
+            return ServiceResult<List<DailyDistanceReportDto>>.Ok(
+                dtos,
+                $"{dtos.Count} ta hisobot topildi");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calculating daily statistics for {Date}", date);
-            return ServiceResult<DailyDistanceStatisticsDto>.ServerError("Xatolik yuz berdi");
+            _logger.LogError(ex, "Error getting filtered reports");
+            return ServiceResult<List<DailyDistanceReportDto>>.ServerError("Xatolik yuz berdi");
         }
     }
 
     /// <summary>
-    /// Foydalanuvchi umumiy statistikasini olish
+    /// Bugungi kun hozirgi vaqtgacha bo'lgan masofani hisoblash (REAL-TIME TEST UCHUN)
+    /// Database'ga saqlanmaydi, faqat hisoblangan natijani qaytaradi
     /// </summary>
-    public async Task<ServiceResult<UserDistanceSummaryDto>> GetUserSummaryAsync(
-        long userId, DateTime startDate, DateTime endDate)
+    public async Task<ServiceResult<DailyDistanceReportDto>> CalculateCurrentDayDistanceAsync(int userId)
     {
         try
         {
-            var reports = await _reportRepository.GetByUserAndDateRangeAsync(userId, startDate, endDate);
+            _logger.LogInformation("Calculating current day distance for user {UserId} up to now", userId);
 
-            if (!reports.Any())
+            // Bugungi kun boshidan hozirgi vaqtgacha bo'lgan locationlarni olish
+            var startOfDay = DateTime.Today; // Local vaqt
+            var endOfDay = DateTime.Now;     // Hozirgi vaqt
+
+            _logger.LogInformation("Start: {Start}, End: {End}", startOfDay, endOfDay);
+
+            // LocationRepository orqali locationlarni olish (Dapper)
+            var locations = (await _reportRepository.GetUserLocationsForDateAsync(userId, startOfDay, endOfDay)).ToList();
+
+            if (!locations.Any())
             {
-                return ServiceResult<UserDistanceSummaryDto>.NotFound(
-                    $"User {userId} uchun hisobotlar topilmadi");
+                _logger.LogWarning("User {UserId} uchun bugungi locationlar topilmadi", userId);
+                return ServiceResult<DailyDistanceReportDto>.Ok(
+                    new DailyDistanceReportDto
+                    {
+                        UserId = userId,
+                        ReportDate = startOfDay,
+                        TotalDistanceMeters = 0,
+                        TotalDistanceKm = 0,
+                        LocationCount = 0,
+                        FirstLocationTime = null,
+                        LastLocationTime = null
+                    },
+                    "Bugungi locationlar topilmadi");
             }
 
-            var summary = new UserDistanceSummaryDto
+            // Masofani hisoblash (distance_from_previous yig'indisi)
+            var totalDistanceMeters = locations
+                .Where(l => l.DistanceFromPrevious.HasValue)
+                .Sum(l => l.DistanceFromPrevious!.Value);
+
+            var firstLocation = locations.OrderBy(l => l.RecordedAt).First();
+            var lastLocation = locations.OrderByDescending(l => l.RecordedAt).First();
+
+            // User ma'lumotlarini olish
+            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+
+            var dto = new DailyDistanceReportDto
             {
+                Id = 0, // Temporary ID (database'da yo'q)
                 UserId = userId,
-                UserName = reports.First().User?.Name ?? "Unknown",
-                Phone = reports.First().User?.Phone,
-                TotalDays = reports.Count,
-                TotalDistanceKm = reports.Sum(r => r.TotalDistanceKm),
-                AverageDistancePerDayKm = reports.Average(r => r.TotalDistanceKm)
+                UserName = user?.Name,
+                Phone = user?.Phone,
+                BranchGuid = user?.BranchGuid,
+                BranchName = user?.BranchName,
+                ReportDate = startOfDay,
+                TotalDistanceMeters = totalDistanceMeters,
+                TotalDistanceKm = Math.Round(totalDistanceMeters / 1000, 2),
+                LocationCount = locations.Count,
+                FirstLocationTime = firstLocation.RecordedAt,
+                LastLocationTime = lastLocation.RecordedAt,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
 
-            var maxDistanceReport = reports.OrderByDescending(r => r.TotalDistanceKm).FirstOrDefault();
-            if (maxDistanceReport != null)
-            {
-                summary.MaxDistanceDay = maxDistanceReport.ReportDate;
-                summary.MaxDistanceKm = maxDistanceReport.TotalDistanceKm;
-            }
+            _logger.LogInformation(
+                "✅ User {UserId} ({UserName}) - Bugungi masofa: {DistanceKm} km ({DistanceM} m), Locationlar: {Count}, " +
+                "Birinchi: {First}, Oxirgi: {Last}",
+                userId, user?.Name, dto.TotalDistanceKm, dto.TotalDistanceMeters, dto.LocationCount,
+                dto.FirstLocationTime, dto.LastLocationTime);
 
-            return ServiceResult<UserDistanceSummaryDto>.Ok(
-                summary,
-                "Umumiy statistika muvaffaqiyatli hisoblandi");
+            return ServiceResult<DailyDistanceReportDto>.Ok(
+                dto,
+                $"Hozirgi vaqtgacha {dto.TotalDistanceKm} km masofa bosilgan");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calculating user summary for user {UserId} from {StartDate} to {EndDate}",
-                userId, startDate, endDate);
-            return ServiceResult<UserDistanceSummaryDto>.ServerError("Xatolik yuz berdi");
+            _logger.LogError(ex, "Error calculating current day distance for user {UserId}", userId);
+            return ServiceResult<DailyDistanceReportDto>.ServerError("Masofani hisoblashda xatolik yuz berdi");
         }
     }
 
     /// <summary>
-    /// Entity ni DTO ga mapping qilish
+    /// Entity ni DTO ga mapping qilish (user ma'lumotlari bilan)
     /// </summary>
-    private DailyDistanceReportDto MapToDto(DailyDistanceReport report)
+    private DailyDistanceReportDto MapToDto(DailyDistanceReport report, User? user)
     {
         return new DailyDistanceReportDto
         {
             Id = report.Id,
-            UserId = report.UserId,
-            UserName = report.User?.Name,
-            Phone = report.User?.Phone,
+            // SIMPLE: report.UserId allaqachon EXTERNAL ID (users.user_id)
+            UserId = report.UserId,  // EXTERNAL ID (PHP worker_id)
+            UserName = user?.Name,
+            Phone = user?.Phone,
+            BranchGuid = report.BranchGuid ?? user?.BranchGuid,
+            BranchName = user?.BranchName,
             ReportDate = report.ReportDate,
             TotalDistanceMeters = report.TotalDistanceMeters,
             TotalDistanceKm = report.TotalDistanceKm,

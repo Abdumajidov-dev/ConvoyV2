@@ -10,7 +10,7 @@ namespace Convoy.Service.Services;
 public class LocationClusteringService
 {
     private readonly ILogger<LocationClusteringService> _logger;
-    private const double ClusterRadiusMeters = 10.0; // 10 metr
+    private const double ClusterRadiusMeters = 50.0; // 10 metr
 
     public LocationClusteringService(ILogger<LocationClusteringService> logger)
     {

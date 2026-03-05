@@ -59,17 +59,18 @@ public class LocationRepository : ILocationRepository
 
     /// <summary>
     /// Batch insert - bir nechta location'larni bir vaqtda yozish va ID'lari bilan qaytarish
+    /// IMPORTANT: Faqat database'da MAVJUD bo'lgan columnlarni INSERT qilish kerak
     /// </summary>
     public async Task<IEnumerable<Location>> InsertBatchAsync(IEnumerable<Location> locations)
     {
+        // NOTE: Bu query faqat database'da MAVJUD bo'lgan columnlarga INSERT qiladi
+        // Entity'da ko'proq propertylar bo'lishi mumkin, lekin database'da yo'q
         const string sql = @"
             INSERT INTO locations (
                 user_id, recorded_at, latitude, longitude,
                 accuracy, speed, heading, altitude,
-                ellipsoidal_altitude, heading_accuracy, speed_accuracy, altitude_accuracy, floor,
                 activity_type, activity_confidence, is_moving,
                 battery_level, is_charging,
-                timestamp, age, event, mock, sample, odometer, uuid, extras,
                 distance_from_previous, created_at
             ) VALUES (
                 @UserId, @RecordedAt, @Latitude, @Longitude,
@@ -221,8 +222,18 @@ public class LocationRepository : ILocationRepository
         try
         {
             var locations = await _connection.QueryAsync<Location>(sql, new { UserId = userId, Count = count });
-            _logger.LogInformation("Retrieved last {Count} locations for UserId={UserId}", locations.Count(), userId);
-            return locations;
+            var locationsList = locations.ToList();
+            _logger.LogInformation("Retrieved last {Count} locations for UserId={UserId}", locationsList.Count, userId);
+
+            // DEBUG: Log first location details if exists
+            if (locationsList.Any())
+            {
+                var first = locationsList.First();
+                _logger.LogInformation("  → First location: ID={Id}, Lat={Lat}, Lon={Lon}, Distance={Dist}, RecordedAt={Time}",
+                    first.Id, first.Latitude, first.Longitude, first.DistanceFromPrevious, first.RecordedAt);
+            }
+
+            return locationsList;
         }
         catch (Exception ex)
         {
@@ -516,21 +527,34 @@ public class LocationRepository : ILocationRepository
 
         try
         {
-            // 1️⃣ Temporary table yarating (faqat session ichida)
+            // 1️⃣ Temporary table yarating (FAQAT MAVJUD COLUMNLAR)
             await connection.ExecuteAsync(@"
             CREATE TEMP TABLE locations_tmp (
                 user_id int,
-                recorded_at timestamp,
+                recorded_at timestamptz,
                 latitude numeric,
                 longitude numeric,
+                accuracy numeric,
                 speed numeric,
-                created_at timestamp
+                heading numeric,
+                altitude numeric,
+                activity_type varchar,
+                activity_confidence int,
+                is_moving boolean,
+                battery_level int,
+                is_charging boolean,
+                distance_from_previous numeric,
+                created_at timestamptz
             ) ON COMMIT DROP;
         ", transaction: transaction);
 
-            // 2️⃣ COPY BINARY bilan tez yozish
+            // 2️⃣ COPY BINARY bilan tez yozish (FAQAT MAVJUD COLUMNLAR)
             await using (var writer = connection.BeginBinaryImport(
-                "COPY locations_tmp (user_id, recorded_at, latitude, longitude, speed, created_at) FROM STDIN (FORMAT BINARY)"))
+                @"COPY locations_tmp (
+                    user_id, recorded_at, latitude, longitude, accuracy, speed, heading, altitude,
+                    activity_type, activity_confidence, is_moving, battery_level, is_charging,
+                    distance_from_previous, created_at
+                ) FROM STDIN (FORMAT BINARY)"))
             {
                 foreach (var loc in locations)
                 {
@@ -539,26 +563,43 @@ public class LocationRepository : ILocationRepository
                     writer.Write(loc.RecordedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                     writer.Write(loc.Latitude, NpgsqlTypes.NpgsqlDbType.Numeric);
                     writer.Write(loc.Longitude, NpgsqlTypes.NpgsqlDbType.Numeric);
-                    writer.Write(loc.Speed ?? 0, NpgsqlTypes.NpgsqlDbType.Numeric);
-                    writer.Write(DateTime.UtcNow, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                    writer.Write(loc.Accuracy, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.Speed, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.Heading, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.Altitude, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.ActivityType, NpgsqlTypes.NpgsqlDbType.Varchar);
+                    writer.Write(loc.ActivityConfidence, NpgsqlTypes.NpgsqlDbType.Integer);
+                    writer.Write(loc.IsMoving, NpgsqlTypes.NpgsqlDbType.Boolean);
+                    writer.Write(loc.BatteryLevel, NpgsqlTypes.NpgsqlDbType.Integer);
+                    writer.Write(loc.IsCharging, NpgsqlTypes.NpgsqlDbType.Boolean);
+                    writer.Write(loc.DistanceFromPrevious, NpgsqlTypes.NpgsqlDbType.Numeric);
+                    writer.Write(loc.CreatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                 }
                 await writer.CompleteAsync();
             }
 
-            // 3️⃣ Temporary table’dan original table’ga yozish va IDs olish
+            // 3️⃣ Temporary table'dan original table'ga yozish va IDs olish (FAQAT MAVJUD COLUMNLAR)
             var ids = (await connection.QueryAsync<long>(
-                @"INSERT INTO locations (user_id, recorded_at, latitude, longitude, speed, created_at)
-              SELECT user_id, recorded_at, latitude, longitude, speed, created_at
-              FROM locations_tmp
-              RETURNING id;",
+                @"INSERT INTO locations (
+                    user_id, recorded_at, latitude, longitude, accuracy, speed, heading, altitude,
+                    activity_type, activity_confidence, is_moving, battery_level, is_charging,
+                    distance_from_previous, created_at
+                )
+                SELECT
+                    user_id, recorded_at, latitude, longitude, accuracy, speed, heading, altitude,
+                    activity_type, activity_confidence, is_moving, battery_level, is_charging,
+                    distance_from_previous, created_at
+                FROM locations_tmp
+                RETURNING id;",
                 transaction: transaction
             )).ToList();
 
             await transaction.CommitAsync();
             return ids;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "BulkInsertAsync error");
             await transaction.RollbackAsync();
             throw;
         }

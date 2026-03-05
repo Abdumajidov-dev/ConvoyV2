@@ -11,10 +11,12 @@ namespace Convoy.Domain.Entities;
 public class DailyDistanceReport : Auditable
 {
     /// <summary>
-    /// Foydalanuvchi ID (users.id ga foreign key)
+    /// Foydalanuvchi ID (users.user_id ga foreign key - PHP API worker_id)
+    /// IMPORTANT: Bu EXTERNAL ID (users.user_id), INTERNAL ID (users.id) emas!
+    /// Locations bilan mos keladi: locations.user_id ham external ID
     /// </summary>
     [Column("user_id")]
-    public long UserId { get; set; }
+    public int? UserId { get; set; }
 
     /// <summary>
     /// Hisobot sanasi (yyyy-MM-dd format)
@@ -52,6 +54,10 @@ public class DailyDistanceReport : Auditable
     [Column("last_location_time")]
     public DateTime? LastLocationTime { get; set; }
 
-    // Navigation property
-    public virtual User? User { get; set; }
+    // NOTE: Navigation property yo'q, chunki FK users.user_id ga (unique constraint)
+    // Manual join qilish kerak
+
+    // Qo'shimcha ma'lumotlar DTO'da to'ldiriladi
+    [Column("branch_guid")]
+    public string? BranchGuid { get; set; }
 }

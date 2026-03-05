@@ -11,13 +11,19 @@ public class DailyDistanceReportDto
     public long Id { get; set; }
 
     [JsonProperty("user_id")]
-    public long UserId { get; set; }
+    public int? UserId { get; set; }  // PHP API worker_id
 
     [JsonProperty("user_name")]
     public string? UserName { get; set; }
 
     [JsonProperty("phone")]
     public string? Phone { get; set; }
+
+    [JsonProperty("branch_guid")]
+    public string? BranchGuid { get; set; }
+
+    [JsonProperty("branch_name")]
+    public string? BranchName { get; set; }
 
     [JsonProperty("report_date")]
     public DateTime ReportDate { get; set; }
@@ -50,10 +56,40 @@ public class DailyDistanceReportDto
 public class GenerateDailyReportRequestDto
 {
     [JsonProperty("user_id")]
-    public long? UserId { get; set; }  // Null bo'lsa barcha userlar uchun
+    public int? UserId { get; set; }  // Null bo'lsa barcha userlar uchun
 
     [JsonProperty("report_date")]
     public DateTime ReportDate { get; set; }
+}
+
+/// <summary>
+/// Hisobotlarni filter qilish uchun request DTO
+/// </summary>
+public class DailyDistanceReportFilterDto
+{
+    /// <summary>
+    /// Filial GUID (optional)
+    /// </summary>
+    [JsonProperty("branch_guid")]
+    public string? BranchGuid { get; set; }
+
+    /// <summary>
+    /// User ID'lar ro'yxati (optional) - PHP API worker_id
+    /// </summary>
+    [JsonProperty("user_ids")]
+    public List<int>? UserIds { get; set; }
+
+    /// <summary>
+    /// Boshlanish sanasi
+    /// </summary>
+    [JsonProperty("start_date")]
+    public DateTime StartDate { get; set; }
+
+    /// <summary>
+    /// Tugash sanasi
+    /// </summary>
+    [JsonProperty("end_date")]
+    public DateTime EndDate { get; set; }
 }
 
 /// <summary>
@@ -62,7 +98,7 @@ public class GenerateDailyReportRequestDto
 public class DateRangeRequestDto
 {
     [JsonProperty("user_id")]
-    public long? UserId { get; set; }  // Null bo'lsa barcha userlar uchun
+    public int? UserId { get; set; }  // Null bo'lsa barcha userlar uchun
 
     [JsonProperty("start_date")]
     public DateTime StartDate { get; set; }
@@ -107,7 +143,7 @@ public class DailyDistanceStatisticsDto
 public class UserDistanceSummaryDto
 {
     [JsonProperty("user_id")]
-    public long UserId { get; set; }
+    public int? UserId { get; set; }
 
     [JsonProperty("user_name")]
     public string UserName { get; set; } = string.Empty;

@@ -73,7 +73,7 @@ public class TelegramRequestLoggingMiddleware
         var method = context.Request.Method.ToUpper();
 
         // Faqat location POST requestlari
-        if (method == "POST" && path.Contains("/api/location"))
+        if (method == "POST" && path.Contains("/api/location") || path.Contains("/api/batch"))
         {
             return false;
         }
