@@ -60,4 +60,9 @@ public interface IUserService
         DateTime? endTime,
         string? branchGuid);
 
+    /// <summary>
+    /// User statistikasi: jami, active va inactive userlar soni
+    /// </summary>
+    Task<UserStatisticsDto> GetUserStatisticsAsync();
+
 }

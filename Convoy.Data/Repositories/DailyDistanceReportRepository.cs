@@ -61,7 +61,7 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     /// Barcha foydalanuvchilar uchun ma'lum sana oralig'idagi hisobotlarni olish
     /// </summary>
     public async Task<IList<DailyDistanceReport>> GetByDateRangeAsync(DateTime startDate, DateTime endDate)
-    {
+     {
         var start = startDate.Date;
         var end = endDate.Date;
 

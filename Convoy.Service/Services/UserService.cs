@@ -797,4 +797,44 @@ public class UserService : IUserService
 
         throw new NotImplementedException();
     }
+
+    /// <summary>
+    /// User statistikasi: jami, active va inactive userlar soni
+    /// </summary>
+    public async Task<UserStatisticsDto> GetUserStatisticsAsync()
+    {
+        try
+        {
+            // Barcha userlar sonini olish
+            var totalUsers = await _context.Users.CountAsync();
+
+            // Active userlar sonini olish
+            var activeUsers = await _context.Users
+                .Where(u => u.IsActive == true)
+                .CountAsync();
+
+            // Inactive userlar sonini olish
+            var inactiveUsers = await _context.Users
+                .Where(u => u.IsActive == false)
+                .CountAsync();
+
+            var statistics = new UserStatisticsDto
+            {
+                TotalUsers = totalUsers,
+                ActiveUsers = activeUsers,
+                InactiveUsers = inactiveUsers
+            };
+
+            _logger.LogInformation(
+                "📊 User statistikasi: Jami={Total}, Active={Active}, Inactive={Inactive}",
+                totalUsers, activeUsers, inactiveUsers);
+
+            return statistics;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user statistics");
+            throw;
+        }
+    }
 }

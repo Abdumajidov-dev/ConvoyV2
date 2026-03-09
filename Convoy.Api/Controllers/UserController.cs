@@ -334,4 +334,33 @@ public class UserController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// User statistikasi: jami, active va inactive userlar soni
+    /// GET /api/users/statistics
+    /// </summary>
+    [HttpGet("statistics")]
+    public async Task<IActionResult> GetStatistics()
+    {
+        try
+        {
+            var statistics = await _userService.GetUserStatisticsAsync();
+            return Ok(new
+            {
+                status = true,
+                message = "Statistika muvaffaqiyatli olindi",
+                data = statistics
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user statistics");
+            return StatusCode(500, new
+            {
+                status = false,
+                message = "Statistikani olishda xatolik yuz berdi",
+                data = (object?)null
+            });
+        }
+    }
 }

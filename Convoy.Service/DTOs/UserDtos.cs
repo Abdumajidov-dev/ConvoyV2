@@ -209,3 +209,27 @@ public class UserWithLocationsDto
     [JsonPropertyName("locations")]
     public List<LocationResponseDto> Locations { get; set; } = new();
 }
+
+/// <summary>
+/// User statistikasi response DTO
+/// </summary>
+public class UserStatisticsDto
+{
+    /// <summary>
+    /// Jami userlar soni
+    /// </summary>
+    [JsonPropertyName("total_users")]
+    public int TotalUsers { get; set; }
+
+    /// <summary>
+    /// Active (is_active = true) userlar soni
+    /// </summary>
+    [JsonPropertyName("active_users")]
+    public int ActiveUsers { get; set; }
+
+    /// <summary>
+    /// Inactive (is_active = false) userlar soni
+    /// </summary>
+    [JsonPropertyName("inactive_users")]
+    public int InactiveUsers { get; set; }
+}

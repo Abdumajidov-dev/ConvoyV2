@@ -19,6 +19,9 @@ public class DailyDistanceReportDto
     [JsonProperty("phone")]
     public string? Phone { get; set; }
 
+    [JsonProperty("user_image")]
+    public string? UserImage { get; set; }
+
     [JsonProperty("branch_guid")]
     public string? BranchGuid { get; set; }
 

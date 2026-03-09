@@ -151,7 +151,14 @@ public class DailyDistanceReportService : IDailyDistanceReportService
 
             var dtos = reports.Select(r => MapToDto(r, users.GetValueOrDefault(r.UserId ?? 0))).ToList();
 
-            _logger.LogInformation("Found {Count} filtered reports", dtos.Count);
+            // If date range is more than 1 day, group by user
+            if (filter.StartDate.Date != filter.EndDate.Date)
+            {
+                _logger.LogInformation("Multi-day range detected ({StartDate} to {EndDate}). Grouping results by user.", filter.StartDate.Date, filter.EndDate.Date);
+                dtos = AggregateReportsByUser(dtos);
+            }
+
+            _logger.LogInformation("Found {Count} reports (after grouping if applicable)", dtos.Count);
 
             return ServiceResult<List<DailyDistanceReportDto>>.Ok(
                 dtos,
@@ -217,6 +224,7 @@ public class DailyDistanceReportService : IDailyDistanceReportService
                 UserId = userId,
                 UserName = user?.Name,
                 Phone = user?.Phone,
+                UserImage = user?.Image,
                 BranchGuid = user?.BranchGuid,
                 BranchName = user?.BranchName,
                 ReportDate = startOfDay,
@@ -258,6 +266,7 @@ public class DailyDistanceReportService : IDailyDistanceReportService
             UserId = report.UserId,  // EXTERNAL ID (PHP worker_id)
             UserName = user?.Name,
             Phone = user?.Phone,
+            UserImage = user?.Image,
             BranchGuid = report.BranchGuid ?? user?.BranchGuid,
             BranchName = user?.BranchName,
             ReportDate = report.ReportDate,
@@ -269,5 +278,34 @@ public class DailyDistanceReportService : IDailyDistanceReportService
             CreatedAt = report.CreatedAt,
             UpdatedAt = report.UpdatedAt
         };
+    }
+
+    /// <summary>
+    /// Bir necha kunlik hisobotlarni user bo'yicha guruhlash va hisoblash
+    /// </summary>
+    private List<DailyDistanceReportDto> AggregateReportsByUser(List<DailyDistanceReportDto> reports)
+    {
+        return reports
+            .GroupBy(r => r.UserId)
+            .Select(g => new DailyDistanceReportDto
+            {
+                Id = 0, // Grouped result doesn't represent a single DB record
+                UserId = g.Key,
+                UserName = g.First().UserName,
+                Phone = g.First().Phone,
+                UserImage = g.First().UserImage,
+                BranchGuid = g.First().BranchGuid,
+                BranchName = g.First().BranchName,
+                ReportDate = g.Min(r => r.ReportDate), // Start date of the period
+                TotalDistanceMeters = g.Sum(r => r.TotalDistanceMeters),
+                TotalDistanceKm = g.Sum(r => r.TotalDistanceKm),
+                LocationCount = g.Sum(r => r.LocationCount),
+                FirstLocationTime = g.Min(r => r.FirstLocationTime),
+                LastLocationTime = g.Max(r => r.LastLocationTime),
+                CreatedAt = g.Min(r => r.CreatedAt),
+                UpdatedAt = g.Max(r => r.UpdatedAt)
+            })
+            .OrderByDescending(r => r.TotalDistanceKm)
+            .ToList();
     }
 }
