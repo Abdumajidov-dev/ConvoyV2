@@ -1,4 +1,4 @@
-namespace Convoy.Api.Middleware;
+﻿namespace Convoy.Api.Middleware;
 
 /// <summary>
 /// Flutter'dan kelayotgan "token" headerini ushlash va log qilish uchun middleware
@@ -16,30 +16,33 @@ public class TokenHeaderLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // "token" headerini tekshirish
-        Console.WriteLine(context.Request.Headers);
-
+        // "token" headerini tekshirish.
+        // DIQQAT: token qiymati HECH QACHON to'liq log qilinmasin - loglar orqali sizib chiqadi.
         if (context.Request.Headers.TryGetValue("token", out var tokenValue))
         {
-            _logger.LogWarning("========================================");
-            _logger.LogWarning("🔍 FLUTTER TOKEN HEADER DETECTED!");
-            _logger.LogWarning("Path: {Path}", context.Request.Path);
-            _logger.LogWarning("Method: {Method}", context.Request.Method);
-            _logger.LogWarning("Token Value: {TokenValue}", tokenValue.ToString());
-            _logger.LogWarning("Content-Type: {ContentType}", context.Request.ContentType);
-            _logger.LogWarning("User-Agent: {UserAgent}", context.Request.Headers["User-Agent"].ToString());
-            _logger.LogWarning("========================================");
-
-            // Agar boshqa headerlar ham kerak bo'lsa
-            _logger.LogInformation("All Headers:");
-            foreach (var header in context.Request.Headers)
-            {
-                _logger.LogInformation("  {Key}: {Value}", header.Key, header.Value);
-            }
+            _logger.LogDebug(
+                "Flutter 'token' header keldi. Path={Path}, Method={Method}, Token={MaskedToken}, UserAgent={UserAgent}",
+                context.Request.Path,
+                context.Request.Method,
+                Mask(tokenValue.ToString()),
+                context.Request.Headers["User-Agent"].ToString());
         }
 
         // Keyingi middleware'ga o'tkazish
         await _next(context);
+    }
+
+    /// <summary>
+    /// Token qiymatini log uchun xavfsiz holga keltiradi: faqat oxirgi 4 belgi ko'rinadi
+    /// </summary>
+    private static string Mask(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(bo'sh)";
+
+        return value.Length <= 4
+            ? "***"
+            : $"***{value[^4..]} (uzunlik: {value.Length})";
     }
 }
 
