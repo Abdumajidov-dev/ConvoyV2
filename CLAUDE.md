@@ -44,6 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **User Monitoring**: Background service checking user location activity and sending admin notifications
 - **Flutter Background Geolocation**: Full integration with flutter_background_geolocation library (extended coords, metadata, events)
 - **snake_case JSON**: ALL API endpoints and JSON fields use snake_case naming convention
+- **OSRM Integration**: Road-based distance via OSRM HTTP API with Haversine fallback
 - **Railway/Docker Deployment**: Support for both Railway cloud and Docker container deployment
 
 ## Build & Run Commands
@@ -153,9 +154,11 @@ Convoy/
 │   │   ├── IOtpService.cs
 │   │   ├── ITokenService.cs
 │   │   ├── ISmsService.cs
-│   │   └── IPhpApiService.cs
+│   │   ├── IPhpApiService.cs
+│   │   └── IOsrmService.cs
 │   └── Services/
-│       ├── LocationService.cs              # Business logic + SignalR broadcast
+│       ├── LocationService.cs              # Business logic + SignalR broadcast + OSRM distance
+│       ├── OsrmService.cs                  # OSRM HTTP API client (road distance, Haversine fallback)
 │       ├── AuthService.cs                  # OTP authentication flow
 │       ├── OtpService.cs                   # OTP generation/validation
 │       ├── TokenService.cs                 # JWT token generation
@@ -197,11 +200,16 @@ Convoy/
 - **Location entity**: Plain POCO with no inheritance (Dapper requires simple mapping)
 - **Key difference**: Location does NOT use `Auditable` base class to avoid Dapper mapping issues
 
-**4. Distance Calculation**
-- Haversine formula implemented in C# (`LocationRepository.CalculateDistance`)
-- Also available as PostgreSQL function `calculate_distance()` in database
+**4. Distance Calculation (OSRM + Haversine Fallback)**
+- **Primary**: OSRM HTTP API (`IOsrmService`) calculates road-based distance
+  - Configured via `Osrm:BaseUrl` in appsettings.json (default: `http://router.project-osrm.org`)
+  - CRITICAL: OSRM coordinate format is `longitude,latitude` (NOT lat,lon)
+  - 5-second timeout; returns `null` on failure
+- **Fallback**: Haversine formula (`LocationRepository.CalculateDistance`) used when OSRM returns null
+- `LocationService.CalculateDistanceAsync()` orchestrates primary + fallback logic
 - Distance stored in `distance_from_previous` column (nullable decimal, meters)
-- Calculated on insert by comparing to user's last location
+- Calculated on each insert by comparing to user's last location
+- Also available as PostgreSQL function `calculate_distance()` in database (Haversine only)
 
 **5. Background Services Execution Order**
 - `DatabaseInitializerService` registers FIRST (ensures database is ready)
@@ -963,6 +971,12 @@ class MyApp extends StatefulWidget with WidgetsBindingObserver {
 - **Device token not working**: Token may be expired/invalid
   - Mobile app should refresh token on app startup
   - Call `POST /api/auth/save_device_token` after login
+
+### OSRM Distance Calculation Issues
+- **OSRM returns null**: Falls back to Haversine automatically — check logs for "OSRM xatolik" warning
+- **Wrong distance calculated**: Verify coordinate order — OSRM expects `longitude,latitude` (NOT lat,lon)
+- **Slow distance calculation**: OSRM has 5s timeout. Self-host OSRM for production; set `Osrm:BaseUrl` to internal server
+- **Swap to Haversine-only**: Remove `IOsrmService` injection from `LocationService` and call `_locationRepository.CalculateDistance()` directly
 
 ### Location Monitoring Issues
 - **Background service not running**: Check logs for startup errors

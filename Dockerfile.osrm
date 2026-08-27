@@ -1,0 +1,14 @@
+# Stage 1: Process map data
+FROM osrm/osrm-backend AS builder
+COPY uzbekistan-latest.osm.pbf /data/map.osm.pbf
+WORKDIR /data
+RUN osrm-extract -p /opt/car.lua /data/map.osm.pbf && \
+    osrm-partition /data/map.osrm && \
+    osrm-customize /data/map.osrm && \
+    rm -f /data/map.osm.pbf
+
+# Stage 2: Runtime
+FROM osrm/osrm-backend
+COPY --from=builder /data /data
+EXPOSE 5000
+CMD ["osrm-routed", "--algorithm", "mld", "--port", "5000", "/data/map.osrm"]

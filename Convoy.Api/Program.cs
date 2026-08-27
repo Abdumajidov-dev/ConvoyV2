@@ -1,4 +1,4 @@
-using Convoy.Api.Middleware;
+﻿using Convoy.Api.Middleware;
 using Convoy.Data.DbContexts;
 using Convoy.Data.IRepositories;
 using Convoy.Data.Repositories;
@@ -16,6 +16,12 @@ using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Maxfiy qiymatlar uchun local fayl (git va docker image'ga tushmaydi).
+// Production'da bu fayl yo'q - environment variable ishlatiladi.
+builder.Configuration
+    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables(); // env var har doim ustun turishi uchun qayta qo'shiladi
 
 // Firebase initialization REMOVED - handled by NotificationService constructor
 // NotificationService automatically loads credentials from:
@@ -84,6 +90,7 @@ builder.Services.AddHttpClient<IPhpApiService, PhpApiService>();
 
 // Telegram Bot Service
 builder.Services.AddHttpClient<ITelegramService, TelegramService>();
+builder.Services.AddHttpClient<IOsrmService, OsrmService>();
 
 // Services
 builder.Services.AddScoped<ILocationService>(sp =>
@@ -93,9 +100,10 @@ builder.Services.AddScoped<ILocationService>(sp =>
     var mapper = sp.GetRequiredService<AutoMapper.IMapper>();
     var logger = sp.GetRequiredService<ILogger<LocationService>>();
     var clusteringService = sp.GetRequiredService<LocationClusteringService>();
+    var osrmService = sp.GetRequiredService<IOsrmService>();
     var hubContext = sp.GetService<IHubContext<Convoy.Api.Hubs.LocationHub>>();
     var telegramService = sp.GetService<ITelegramService>();
-    return new LocationService(userRepo, locationRepo, mapper, logger, clusteringService, hubContext, telegramService);
+    return new LocationService(userRepo, locationRepo, mapper, logger, clusteringService, osrmService, hubContext, telegramService);
 });
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();

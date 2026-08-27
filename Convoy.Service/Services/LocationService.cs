@@ -21,6 +21,7 @@ public class LocationService : ILocationService
     private readonly object? _locationHubContext;
     private readonly ITelegramService? _telegramService;
     private readonly LocationClusteringService _clusteringService;
+    private readonly IOsrmService _osrmService;
 
     public LocationService(
         IRepository<User> userRepository,
@@ -28,6 +29,7 @@ public class LocationService : ILocationService
         IMapper mapper,
         ILogger<LocationService> logger,
         LocationClusteringService clusteringService,
+        IOsrmService osrmService,
         object? locationHubContext = null,
         ITelegramService? telegramService = null)
     {
@@ -36,8 +38,19 @@ public class LocationService : ILocationService
         _mapper = mapper;
         _logger = logger;
         _clusteringService = clusteringService;
+        _osrmService = osrmService;
         _locationHubContext = locationHubContext;
         _telegramService = telegramService;
+    }
+
+    // OSRM orqali yo'l masofasini hisoblash, muvaffaqiyatsiz bo'lsa Haversine fallback
+    private async Task<decimal> CalculateDistanceAsync(decimal prevLat, decimal prevLon, decimal newLat, decimal newLon)
+    {
+        var roadDistance = await _osrmService.GetRoadDistanceAsync(prevLat, prevLon, newLat, newLon);
+        if (roadDistance.HasValue)
+            return (decimal)roadDistance.Value;
+
+        return (decimal)_locationRepository.CalculateDistance(prevLat, prevLon, newLat, newLon);
     }
     public async Task<ServiceResult<IList<LocationResponseDto>>>
         CreateUserLocationsAsync(int userId, IList<LocationDataDto> locationsData)
@@ -72,14 +85,12 @@ public class LocationService : ILocationService
 
                 if (previousLocation != null)
                 {
-                    var distance = _locationRepository.CalculateDistance(
+                    distanceFromPrevious = await CalculateDistanceAsync(
                         previousLocation.Latitude,
                         previousLocation.Longitude,
                         locationData.Latitude,
                         locationData.Longitude
                     );
-
-                    distanceFromPrevious = (decimal)distance;
                 }
 
                 var location = new Location
@@ -163,14 +174,12 @@ public class LocationService : ILocationService
                 _logger.LogInformation("🔍 Previous location found: ID={PrevId}, Lat={PrevLat}, Lon={PrevLon}, RecordedAt={PrevTime}",
                     previousLocation.Id, previousLocation.Latitude, previousLocation.Longitude, previousLocation.RecordedAt);
 
-                var distance = _locationRepository.CalculateDistance(
+                distanceFromPrevious = await CalculateDistanceAsync(
                     previousLocation.Latitude,
                     previousLocation.Longitude,
                     locationData.Latitude,
                     locationData.Longitude
                 );
-
-                distanceFromPrevious = (decimal)distance;
 
                 _logger.LogInformation("📏 Distance calculated: {Distance} meters (Previous→New)", distanceFromPrevious);
                 _logger.LogInformation("📍 New location: Lat={NewLat}, Lon={NewLon}",
@@ -817,16 +826,13 @@ public class LocationService : ILocationService
 
             if (previousLocation != null)
             {
-                var distance = _locationRepository.CalculateDistance(
+                distanceFromPrevious = await CalculateDistanceAsync(
                     previousLocation.Latitude,
                     previousLocation.Longitude,
                     locationData.Latitude,
                     locationData.Longitude
                 );
-                distanceFromPrevious = (decimal)distance;
             }
-
-
 
             // Location entity yaratish
             var location = new Location
@@ -913,14 +919,12 @@ public class LocationService : ILocationService
 
                 if (previousLocation != null)
                 {
-                    var distance = _locationRepository.CalculateDistance(
+                    distanceFromPrevious = await CalculateDistanceAsync(
                         previousLocation.Latitude,
                         previousLocation.Longitude,
                         item.Latitude,
                         item.Longitude
                     );
-
-                    distanceFromPrevious = (decimal)distance;
                 }
 
                 var location = new Location

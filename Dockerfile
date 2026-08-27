@@ -103,7 +103,7 @@ RUN if [ -f /src/firebase-adminsdk.json ]; then \
     fi
 
 # Install strings utility for verification
-RUN apt-get update && apt-get install -y binutils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y binutils curl && rm -rf /var/lib/apt/lists/*
 
 # CRITICAL: Verify controllers in final DLL
 RUN echo "════════════════════════════════════════════════" && \
@@ -139,7 +139,7 @@ ENV DOTNET_VERSION=8.0.0.065f49a
 
 # Health check for Railway
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:$PORT/health || exit 1
+    CMD curl -fsS http://localhost:${PORT:-8080}/health || exit 1
 
 # Entry point with verbose logging
 ENTRYPOINT ["sh", "-c", "echo '🚀 Starting Convoy API v$DOTNET_VERSION on port $PORT' && dotnet Convoy.Api.dll --urls http://0.0.0.0:$PORT"]

@@ -96,7 +96,18 @@
       "Bash(cmd.exe /c:*)",
       "Bash(curl:*)",
       "Bash(timeout /t 2 /nobreak)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "PowerShell(netstat *)",
+      "PowerShell($buildId = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds\\(\\); docker build -t abdumajidov01/convoy:latest --build-arg BUILD_ID=$buildId .)",
+      "PowerShell(docker push *)",
+      "PowerShell(docker build *)",
+      "PowerShell(Invoke-WebRequest -Uri \"https://download.geofabrik.de/asia/central-asia-latest.osm.pbf\" -OutFile \"central-asia-latest.osm.pbf\" -UseBasicParsing)",
+      "PowerShell(\\(Get-Item \"central-asia-latest.osm.pbf\"\\).Length / 1MB)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(\\(Get-Item \"asia-260601.osm.pbf\"\\).Length / 1MB)",
+      "PowerShell(docker run --rm -v \"${PWD}:/data\" stefanct/osmium-tool osmium extract --bbox 55.99,37.18,73.13,45.57 /data/asia-260601.osm.pbf -o /data/uzbekistan-latest.osm.pbf --overwrite)",
+      "PowerShell(docker run --rm -v \"${PWD}:/data\" debian:bullseye-slim bash -c \"apt-get update -qq && apt-get install -y -q osmium-tool && osmium extract --bbox 55.99,37.18,73.13,45.57 /data/asia-260601.osm.pbf -o /data/uzbekistan-latest.osm.pbf --overwrite\")",
+      "PowerShell(\\(Get-Item \"uzbekistan-latest.osm.pbf\"\\).Length / 1MB)"
     ],
     "deny": [],
     "ask": []

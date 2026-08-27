@@ -34,3 +34,9 @@ README.md
 !Convoy.Api/Controllers/BranchController.cs
 !Convoy.Api/Controllers/LocationController.cs
 !Convoy.Api/Controllers/UserController.cs
+
+# Local secrets - image ichiga HECH QACHON tushmasin
+**/appsettings.Local.json
+
+# OSM map data - build context'ni shishirmasin (3GB!)
+*.osm.pbf
