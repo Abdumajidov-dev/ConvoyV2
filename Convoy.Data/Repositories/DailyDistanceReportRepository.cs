@@ -1,4 +1,4 @@
-using Convoy.Data.DbContexts;
+﻿using Convoy.Data.DbContexts;
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -24,12 +24,21 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     }
 
     /// <summary>
+    /// report_date - timestamptz ustuni. DateTime.Date Kind=Unspecified qaytaradi va
+    /// Npgsql uni timestamptz bilan solishtira olmay exception tashlaydi
+    /// ("Cannot write DateTime with Kind=Unspecified"). Shuning uchun kalendar
+    /// sanani o'zgartirmasdan Kind=Utc deb belgilaymiz.
+    /// </summary>
+    private static DateTime ToUtcDate(DateTime value)
+        => DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+
+    /// <summary>
     /// Foydalanuvchining ma'lum sana uchun hisobotini olish
     /// IMPORTANT: userId = users.user_id (external PHP worker_id)
     /// </summary>
     public async Task<DailyDistanceReport?> GetByUserAndDateAsync(int userId, DateTime date)
     {
-        var reportDate = date.Date; // Faqat sana qismini olish (vaqtni olib tashlash)
+        var reportDate = ToUtcDate(date); // Faqat sana qismi, Kind=Utc
 
         // PostgreSQL DATE column bilan TO'G'RI taqqoslash
         // reportDate allaqachon .Date qilingan (line 32)
@@ -46,8 +55,8 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     /// </summary>
     public async Task<IList<DailyDistanceReport>> GetByUserAndDateRangeAsync(int userId, DateTime startDate, DateTime endDate)
     {
-        var start = startDate.Date;
-        var end = endDate.Date;
+        var start = ToUtcDate(startDate);
+        var end = ToUtcDate(endDate);
 
         // FIX: PostgreSQL DATE column bilan to'g'ri taqqoslash
         return await _dbContext.DailyDistanceReports
@@ -62,8 +71,8 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     /// </summary>
     public async Task<IList<DailyDistanceReport>> GetByDateRangeAsync(DateTime startDate, DateTime endDate)
      {
-        var start = startDate.Date;
-        var end = endDate.Date;
+        var start = ToUtcDate(startDate);
+        var end = ToUtcDate(endDate);
 
         return await _dbContext.DailyDistanceReports
             .Where(r => r.ReportDate >= start && r.ReportDate <= end)
@@ -77,7 +86,7 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     /// </summary>
     public async Task<IList<DailyDistanceReport>> GetTopDistancesByDateAsync(DateTime date, int topCount = 10)
     {
-        var reportDate = date.Date;
+        var reportDate = ToUtcDate(date);
 
         return await _dbContext.DailyDistanceReports
             .Where(r => r.ReportDate == reportDate)
@@ -93,7 +102,7 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     /// </summary>
     public async Task<long> UpsertDailyDistanceReportAsync(int userId, DateTime date)
     {
-        var reportDate = date.Date;
+        var reportDate = ToUtcDate(date);
 
         // PostgreSQL function ni chaqirish
         using var cmd = _connection.CreateCommand();
@@ -119,7 +128,7 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
     /// </summary>
     public async Task<IList<(int UserId, long ReportId, decimal DistanceKm)>> GenerateDailyReportsForDateAsync(DateTime date)
     {
-        var reportDate = date.Date;
+        var reportDate = ToUtcDate(date);
         var results = new List<(int, long, decimal)>();
 
         // PostgreSQL function ni chaqirish
@@ -156,8 +165,8 @@ public class DailyDistanceReportRepository : Repository<DailyDistanceReport>, ID
         DateTime startDate,
         DateTime endDate)
     {
-        var start = startDate.Date;
-        var end = endDate.Date;
+        var start = ToUtcDate(startDate);
+        var end = ToUtcDate(endDate);
 
         var query = _dbContext.DailyDistanceReports.AsQueryable();
 
