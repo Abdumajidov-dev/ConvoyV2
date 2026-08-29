@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using Convoy.Data.IRepositories;
 using Convoy.Domain.Entities;
 using Convoy.Service.Common;
@@ -51,6 +51,40 @@ public class LocationService : ILocationService
             return (decimal)roadDistance.Value;
 
         return (decimal)_locationRepository.CalculateDistance(prevLat, prevLon, newLat, newLon);
+    }
+
+    /// <summary>
+    /// recorded_at ni tozalash.
+    /// locations - partition qilingan jadval, partitionlar faqat real oylar uchun mavjud.
+    /// Agar client recorded_at yubormasa, DateTime default (0001-01-01) bo'lib qoladi va
+    /// INSERT "no partition of relation locations found for row" xatosi bilan yiqiladi -
+    /// ya'ni location butunlay yo'qoladi. Shuning uchun buzuq sanani server vaqtiga
+    /// almashtiramiz: noto'g'ri vaqt bilan saqlash - umuman saqlamaslikdan yaxshiroq.
+    /// </summary>
+    private DateTime ResolveRecordedAt(DateTime recordedAt, int userId)
+    {
+        var now = DateTimeExtensions.NowInApplicationTime(); // UTC
+
+        if (recordedAt == default)
+        {
+            _logger.LogWarning(
+                "recorded_at kelmadi (UserId={UserId}) - server vaqti qo'yildi: {Now}",
+                userId, now);
+            return now;
+        }
+
+        var recordedAtUtc = recordedAt.ToApplicationTime();
+
+        // 2000-yildan oldingi yoki 1 kundan ortiq kelajakdagi sana - buzuq client
+        if (recordedAtUtc.Year < 2000 || recordedAtUtc > now.AddDays(1))
+        {
+            _logger.LogWarning(
+                "recorded_at mantiqsiz: {Value} (UserId={UserId}) - server vaqti qo'yildi",
+                recordedAt, userId);
+            return now;
+        }
+
+        return recordedAtUtc;
     }
     public async Task<ServiceResult<IList<LocationResponseDto>>>
         CreateUserLocationsAsync(int userId, IList<LocationDataDto> locationsData)
@@ -815,8 +849,8 @@ public class LocationService : ILocationService
     {
         try
         {
-            // FIXED: RecordedAt ni to'g'ri UTC'ga konvertatsiya qilish
-            var recordedAtUtc = locationData.RecordedAt.ToApplicationTime();
+            // recorded_at yo'q yoki buzuq bo'lsa server vaqti qo'yiladi (partition xatosidan saqlaydi)
+            var recordedAtUtc = ResolveRecordedAt(locationData.RecordedAt, userId);
 
             // User'ning oldingi location'ini olish (distance hisoblash uchun)
             var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
@@ -913,7 +947,7 @@ public class LocationService : ILocationService
 
             foreach (var item in ordered)
             {
-                var recordedAtUtc = item.RecordedAt.ToApplicationTime();
+                var recordedAtUtc = ResolveRecordedAt(item.RecordedAt, userId);
 
                 decimal? distanceFromPrevious = null;
 
