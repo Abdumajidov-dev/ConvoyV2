@@ -54,6 +54,27 @@ public class LocationService : ILocationService
     }
 
     /// <summary>
+    /// Koordinata haqiqiyligini tekshirish.
+    /// Mobil SDK ilova birinchi marta ochilganda GPS hali tayyor bo'lmaganda
+    /// (0, 0) yuboradi - bu Atlantika okeanidagi "Null Island" nuqtasi, real
+    /// joylashuv emas. Uni saqlash marshrutni buzadi va masofani ming km ga
+    /// oshirib yuboradi.
+    /// </summary>
+    private static bool IsValidCoordinate(decimal latitude, decimal longitude)
+    {
+        if (latitude == 0m && longitude == 0m)
+            return false;
+
+        if (latitude < -90m || latitude > 90m)
+            return false;
+
+        if (longitude < -180m || longitude > 180m)
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
     /// recorded_at ni tozalash.
     /// locations - partition qilingan jadval, partitionlar faqat real oylar uchun mavjud.
     /// Agar client recorded_at yubormasa, DateTime default (0001-01-01) bo'lib qoladi va
@@ -861,6 +882,16 @@ public class LocationService : ILocationService
     {
         try
         {
+            if (!IsValidCoordinate(locationData.Latitude, locationData.Longitude))
+            {
+                _logger.LogWarning(
+                    "Noto'g'ri koordinata rad etildi: UserId={UserId}, Lat={Lat}, Lon={Lon}",
+                    userId, locationData.Latitude, locationData.Longitude);
+
+                return ServiceResult<LocationResponseDto>.BadRequest(
+                    "Koordinata noto'g'ri (0,0 yoki chegaradan tashqarida) - location saqlanmadi");
+            }
+
             // recorded_at yo'q yoki buzuq bo'lsa server vaqti qo'yiladi (partition xatosidan saqlaydi)
             var recordedAtUtc = ResolveRecordedAt(locationData.RecordedAt, userId);
 
@@ -945,8 +976,27 @@ public class LocationService : ILocationService
                 return ServiceResult<IList<LocationResponseDto>>
                     .BadRequest("Locations ro'yxati bo'sh");
 
+            // Noto'g'ri koordinatalarni tashlab yuborish (butun batch yiqilmaydi)
+            var validLocations = locationsData
+                .Where(x => IsValidCoordinate(x.Latitude, x.Longitude))
+                .ToList();
+
+            var skipped = locationsData.Count - validLocations.Count;
+            if (skipped > 0)
+            {
+                _logger.LogWarning(
+                    "{Skipped} ta noto'g'ri koordinata (0,0 yoki chegaradan tashqari) tashlab yuborildi: UserId={UserId}",
+                    skipped, userId);
+            }
+
+            if (!validLocations.Any())
+            {
+                return ServiceResult<IList<LocationResponseDto>>
+                    .BadRequest("Barcha koordinatalar noto'g'ri (0,0 yoki chegaradan tashqarida)");
+            }
+
             // RecordedAt bo‘yicha tartiblash
-            var ordered = locationsData
+            var ordered = validLocations
                 .OrderBy(x => x.RecordedAt)
                 .ToList();
 
