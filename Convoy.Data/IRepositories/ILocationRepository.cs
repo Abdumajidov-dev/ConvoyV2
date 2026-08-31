@@ -61,6 +61,13 @@ public interface ILocationRepository
     /// <summary>
     /// Ko'p userlarning locationlarini vaqt oralig'ida olish (vaqt string filtri bilan: "HH:MM")
     /// </summary>
+    /// <summary>
+    /// Vaqt bo'yicha berilgan nuqtadan OLDINGI location. Masofa hisoblash uchun
+    /// "eng yangi" emas, aynan shu kerak: offline navbat eski nuqtalarni keyin
+    /// yuborganda "eng yangi" bilan solishtirish o'nlab km sakrash beradi.
+    /// </summary>
+    Task<Location?> GetPreviousLocationAsync(int userId, DateTime beforeUtc);
+
     Task<IEnumerable<Location>> GetMultipleUsersLocationsAsync(List<int> userIds, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null, int? limitPerUser = null);
 
     /// <summary>

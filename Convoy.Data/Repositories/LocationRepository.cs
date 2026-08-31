@@ -203,6 +203,45 @@ public class LocationRepository : ILocationRepository
     /// <summary>
     /// User'ning oxirgi N ta location'ini olish
     /// </summary>
+    /// <summary>
+    /// Vaqt bo'yicha oldingi location (masofa hisoblash uchun).
+    /// 2 kunlik oyna: partition pruning ishlashi uchun va uzoq tanaffusdan keyin
+    /// mantiqsiz katta masofa chiqmasligi uchun.
+    /// </summary>
+    public async Task<Location?> GetPreviousLocationAsync(int userId, DateTime beforeUtc)
+    {
+        const string sql = @"
+            SELECT
+                id, user_id as UserId, recorded_at as RecordedAt,
+                latitude, longitude, accuracy, speed, heading, altitude,
+                activity_type as ActivityType, activity_confidence as ActivityConfidence,
+                is_moving as IsMoving, battery_level as BatteryLevel,
+                is_charging as IsCharging,
+                distance_from_previous as DistanceFromPrevious,
+                created_at as CreatedAt
+            FROM locations
+            WHERE user_id = @UserId
+                AND recorded_at < @Before
+                AND recorded_at >= @WindowStart
+            ORDER BY recorded_at DESC
+            LIMIT 1";
+
+        try
+        {
+            return await _connection.QueryFirstOrDefaultAsync<Location>(sql, new
+            {
+                UserId = userId,
+                Before = beforeUtc,
+                WindowStart = beforeUtc.AddDays(-2)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting previous location for UserId={UserId}, Before={Before}", userId, beforeUtc);
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<Location>> GetLastLocationsAsync(int userId, int count = 100)
     {
         const string sql = @"

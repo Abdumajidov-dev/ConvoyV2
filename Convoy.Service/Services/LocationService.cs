@@ -864,9 +864,10 @@ public class LocationService : ILocationService
             // recorded_at yo'q yoki buzuq bo'lsa server vaqti qo'yiladi (partition xatosidan saqlaydi)
             var recordedAtUtc = ResolveRecordedAt(locationData.RecordedAt, userId);
 
-            // User'ning oldingi location'ini olish (distance hisoblash uchun)
-            var lastLocations = await _locationRepository.GetLastLocationsAsync(userId, 1);
-            var previousLocation = lastLocations.FirstOrDefault();
+            // Vaqt bo'yicha OLDINGI location (eng yangisi emas!) - offline navbat
+            // eski nuqtalarni keyin yuborganda masofa sakrab ketmasligi uchun
+            var previousLocation = await _locationRepository
+                .GetPreviousLocationAsync(userId, recordedAtUtc);
 
             decimal? distanceFromPrevious = null;
 
@@ -949,11 +950,12 @@ public class LocationService : ILocationService
                 .OrderBy(x => x.RecordedAt)
                 .ToList();
 
-            // Oxirgi mavjud location
-            var lastLocations = await _locationRepository
-                .GetLastLocationsAsync(userId, 1);
-
-            var previousLocation = lastLocations.FirstOrDefault();
+            // Zanjir boshlanishi: batchdagi ENG ERTA nuqtadan oldingi location.
+            // "Eng yangi location" olinsa, offline navbat bo'shatilganda masofa
+            // o'nlab km sakraydi (eski nuqta yangisi bilan solishtiriladi).
+            var firstRecordedAt = ResolveRecordedAt(ordered.First().RecordedAt, userId);
+            var previousLocation = await _locationRepository
+                .GetPreviousLocationAsync(userId, firstRecordedAt);
 
             var newLocations = new List<Location>();
 
