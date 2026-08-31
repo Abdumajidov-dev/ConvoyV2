@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace Convoy.Service.DTOs;
 
@@ -204,6 +204,15 @@ public class UserWithLocationsDto
 
     [JsonPropertyName("updated_at")]
     public DateTime? UpdatedAt { get; set; }
+
+    // Filterdagi oraliqda bosib o'tilgan umumiy masofa.
+    // DIQQAT: locations ro'yxati clustering va limit bilan qisqartiriladi,
+    // shuning uchun bu qiymat alohida SQL aggregate'dan olinadi.
+    [JsonPropertyName("total_distance_meters")]
+    public decimal TotalDistanceMeters { get; set; }
+
+    [JsonPropertyName("total_km")]
+    public decimal TotalKm { get; set; }
 
     // User'ning locationlari (clustering qilingan, stopped_time bilan)
     [JsonPropertyName("locations")]

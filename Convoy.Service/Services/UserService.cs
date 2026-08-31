@@ -192,7 +192,7 @@ public class UserService : IUserService
             .Select(u => new UserResponseDto
             {
                 Id = u.Id,
-                UserId = (int)u.UserId,
+                UserId = u.UserId ?? 0,   // user_id NULL bo'lishi mumkin (test userlar)
                 Name = u.Name,
                 Phone = u.Phone,
                 BranchGuid = u.BranchGuid,
@@ -615,7 +615,12 @@ public class UserService : IUserService
         }
 
         var users = await query.ToListAsync();
-        var userIds = users.Select(u => (int)u.UserId!).ToList();
+        // user_id NULL bo'lgan userlar (seed/test yozuvlar) chetlab o'tiladi -
+        // aks holda (int)u.UserId! "Nullable object must have a value" tashlaydi
+        var userIds = users
+            .Where(u => u.UserId.HasValue)
+            .Select(u => u.UserId!.Value)
+            .ToList();
 
         // 3. is_stopped filter (to'xtab turgan userlar)
         if (isStopped.HasValue && userIds.Any())

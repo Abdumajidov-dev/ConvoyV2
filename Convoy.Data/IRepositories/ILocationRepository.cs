@@ -1,4 +1,4 @@
-using Convoy.Domain.Entities;
+﻿using Convoy.Domain.Entities;
 
 namespace Convoy.Data.IRepositories;
 
@@ -62,4 +62,10 @@ public interface ILocationRepository
     /// Ko'p userlarning locationlarini vaqt oralig'ida olish (vaqt string filtri bilan: "HH:MM")
     /// </summary>
     Task<IEnumerable<Location>> GetMultipleUsersLocationsAsync(List<int> userIds, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null, int? limitPerUser = null);
+
+    /// <summary>
+    /// Userlar bo'yicha umumiy masofa (metr). limitPerUser ta'sir qilmaydi -
+    /// filter oralig'idagi BARCHA nuqtalar yig'iladi.
+    /// </summary>
+    Task<IDictionary<int, decimal>> GetTotalDistanceByUsersAsync(List<int> userIds, DateTime startDate, DateTime endDate, string? startTime = null, string? endTime = null);
 }

@@ -742,6 +742,14 @@ public class LocationService : ILocationService
                 query.Limit
             );
 
+            // Umumiy masofa - limit va clustering ta'sir qilmasligi uchun alohida aggregate
+            var totalDistanceByUser = await _locationRepository.GetTotalDistanceByUsersAsync(
+                userIds,
+                startDate,
+                endDate,
+                query.StartTime,
+                query.EndTime);
+
             var locationDtos = _mapper.Map<IEnumerable<LocationResponseDto>>(locations);
 
             // Locationlarni user_id bo'yicha group qilish
@@ -776,10 +784,14 @@ public class LocationService : ILocationService
                     ? _clusteringService.GetFilteredLocationsWithStoppedTime(userLocations, userId)
                     : new List<LocationResponseDto>();
 
+                var totalMeters = totalDistanceByUser.TryGetValue(userId, out var meters) ? meters : 0m;
+
                 var userWithLocations = new UserWithLocationsDto
                 {
                     Id = user.Id,
                     UserId = user.UserId,  // ADDED: user_id field
+                    TotalDistanceMeters = Math.Round(totalMeters, 2),
+                    TotalKm = Math.Round(totalMeters / 1000m, 2),
                     Name = user.Name,
                     Phone = user.Phone,
                     BranchGuid = user.BranchGuid,

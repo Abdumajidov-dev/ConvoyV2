@@ -516,6 +516,93 @@ public class LocationRepository : ILocationRepository
             throw;
         }
     }
+    /// <summary>
+    /// Userlar bo'yicha umumiy masofa (metr).
+    /// GetMultipleUsersLocationsAsync limitPerUser bilan nuqtalarni qisqartiradi va
+    /// clustering ham bir qismini tashlab yuboradi - shuning uchun jami masofani
+    /// javobdagi nuqtalardan hisoblab bo'lmaydi, alohida aggregate kerak.
+    /// </summary>
+    public async Task<IDictionary<int, decimal>> GetTotalDistanceByUsersAsync(
+        List<int> userIds,
+        DateTime startDate,
+        DateTime endDate,
+        string? startTime = null,
+        string? endTime = null)
+    {
+        if (userIds == null || !userIds.Any())
+            return new Dictionary<int, decimal>();
+
+        var sql = @"
+            SELECT user_id AS UserId,
+                   COALESCE(SUM(distance_from_previous), 0) AS TotalMeters
+            FROM locations
+            WHERE user_id = ANY(@UserIds)
+                AND recorded_at >= @StartDate
+                AND recorded_at < @EndDate";
+
+        var (startHour, startMinute) = ParseTimeParts(startTime);
+        var (endHour, endMinute) = ParseTimeParts(endTime);
+
+        // Vaqt filtri - GetMultipleUsersLocationsAsync bilan bir xil mantiq (Toshkent vaqti)
+        if (startHour.HasValue && endHour.HasValue)
+        {
+            sql += @"
+                AND (
+                    EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') >= @StartHour * 60 + @StartMinute
+                    AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') <= @EndHour * 60 + @EndMinute
+                )";
+        }
+        else if (startHour.HasValue)
+        {
+            sql += @"
+                AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') >= @StartHour * 60 + @StartMinute";
+        }
+        else if (endHour.HasValue)
+        {
+            sql += @"
+                AND EXTRACT(HOUR FROM recorded_at AT TIME ZONE 'Asia/Tashkent') * 60 + EXTRACT(MINUTE FROM recorded_at AT TIME ZONE 'Asia/Tashkent') <= @EndHour * 60 + @EndMinute";
+        }
+
+        sql += @"
+            GROUP BY user_id";
+
+        try
+        {
+            var rows = await _connection.QueryAsync<(int UserId, decimal TotalMeters)>(sql, new
+            {
+                UserIds = userIds.ToArray(),
+                StartDate = startDate,
+                EndDate = endDate,
+                StartHour = startHour,
+                StartMinute = startMinute,
+                EndHour = endHour,
+                EndMinute = endMinute
+            });
+
+            return rows.ToDictionary(r => r.UserId, r => r.TotalMeters);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting total distance for users (UserIds={UserIds})", string.Join(",", userIds));
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// "HH:MM" formatidagi vaqtni soat va daqiqaga ajratish
+    /// </summary>
+    private static (int? Hour, int? Minute) ParseTimeParts(string? time)
+    {
+        if (string.IsNullOrWhiteSpace(time))
+            return (null, null);
+
+        var parts = time.Split(':');
+        if (parts.Length == 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m))
+            return (h, m);
+
+        return (null, null);
+    }
+
     public async Task<IList<long>> BulkInsertAsync(IList<Location> locations)
     {
         if (locations == null || !locations.Any())
