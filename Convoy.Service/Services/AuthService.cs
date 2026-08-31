@@ -234,6 +234,27 @@ public class AuthService : IAuthService
     }
 
     /// <summary>
+    /// PHP API rasm manzilini tozalash.
+    /// PHP tomon ba'zan base URL'ni ikki marta qo'shib yuboradi:
+    ///   https://garant-hr.uz/api/public/https://garant-hr.uz/api/public/images/...
+    /// Bunday holatda oxirgi to'liq URL qoldiriladi.
+    /// </summary>
+    private static string? NormalizeImageUrl(string? photo)
+    {
+        if (string.IsNullOrWhiteSpace(photo))
+            return photo;
+
+        var trimmed = photo.Trim();
+
+        // Birinchi belgidan keyin yana http(s):// uchrasa - takrorlangan prefiks
+        var lastHttps = trimmed.LastIndexOf("https://", StringComparison.OrdinalIgnoreCase);
+        var lastHttp = trimmed.LastIndexOf("http://", StringComparison.OrdinalIgnoreCase);
+        var lastScheme = Math.Max(lastHttps, lastHttp);
+
+        return lastScheme > 0 ? trimmed.Substring(lastScheme) : trimmed;
+    }
+
+    /// <summary>
     /// Token'dan olingan user ma'lumotlarini local database'ga sync qilish
     /// worker_id bo'yicha user'ni qidiradi (agar user mavjud bo'lsa - update, bo'lmasa - create)
     /// </summary>
@@ -259,7 +280,7 @@ public class AuthService : IAuthService
                 existingUser.BranchGuid = phpUser.FilialGuid;
                 existingUser.BranchName = phpUser.FilialName;
                 existingUser.PositionId = phpUser.PositionId;
-                existingUser.Image = phpUser.Photo;
+                existingUser.Image = NormalizeImageUrl(phpUser.Photo);
                 existingUser.UserType = phpUser.Type;
                 existingUser.Role = phpUser.Role;
                 // Role: App.Allowed.Role dan olish (agar null bo'lsa phpUser.Role ishlatiladi)
@@ -289,7 +310,7 @@ public class AuthService : IAuthService
                     BranchGuid = phpUser.FilialGuid,
                     BranchName = phpUser.FilialName,
                     PositionId = phpUser.PositionId,
-                    Image = phpUser.Photo,
+                    Image = NormalizeImageUrl(phpUser.Photo),
                     UserType = phpUser.Type,
                     Role = userRole,
                     IsActive = true
