@@ -32,5 +32,9 @@ public interface IPhpApiService
     /// </summary>
     /// <param name="searchTerm">Qidiruv matni (optional)</param>
     /// <returns>Filiallar ro'yxati</returns>
-    Task<List<BranchDto>> GetBranchesAsync(string? searchTerm = null);
+    /// <summary>
+    /// Filiallar ro'yxati. PHP API Bearer token talab qiladi -
+    /// token berilmasa joriy so'rovning Authorization headeridan olinadi.
+    /// </summary>
+    Task<List<BranchDto>> GetBranchesAsync(string? searchTerm = null, string? token = null);
 }

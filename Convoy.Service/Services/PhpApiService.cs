@@ -1,5 +1,6 @@
 ﻿using Convoy.Service.DTOs;
 using Convoy.Service.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -15,11 +16,17 @@ public class PhpApiService : IPhpApiService
     private readonly string _username;
     private readonly string _password;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
-    public PhpApiService(HttpClient httpClient, IConfiguration configuration, ILogger<PhpApiService> logger)
+    public PhpApiService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<PhpApiService> logger,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
         _baseUrl = configuration["PhpApi:GlobalPathForSupport"] ?? "http://delivery.garant.uz/api/";
         _username = configuration["PhpApi:Username"] ?? "login";
         _password = configuration["PhpApi:Password"] ?? "password";
@@ -315,9 +322,25 @@ public class PhpApiService : IPhpApiService
     }
 
     /// <summary>
+    /// Joriy HTTP so'rovining Authorization headeridan Bearer tokenni olish.
+    /// Background servislarda HttpContext bo'lmaydi - null qaytadi.
+    /// </summary>
+    private string? GetIncomingBearerToken()
+    {
+        var header = _httpContextAccessor?.HttpContext?.Request?.Headers["Authorization"].ToString();
+
+        if (string.IsNullOrWhiteSpace(header))
+            return null;
+
+        return header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? header.Substring("Bearer ".Length).Trim()
+            : header.Trim();
+    }
+
+    /// <summary>
     /// PHP API dan filiallar ro'yxatini oladi
     /// </summary>
-    public async Task<List<BranchDto>> GetBranchesAsync(string? searchTerm = null)
+    public async Task<List<BranchDto>> GetBranchesAsync(string? searchTerm = null, string? token = null)
     {
         try
         {
@@ -336,7 +359,23 @@ public class PhpApiService : IPhpApiService
                 "application/json"
             );
 
-            var response = await _httpClient.PostAsync(endpoint, content);
+            // PHP API Bearer token kutadi. Konstruktordagi Basic auth bu yerda
+            // ishlamaydi (401 "Unauthorized faild!") - shuning uchun so'rov
+            // uchun alohida Authorization header qo'yamiz.
+            var bearer = token ?? GetIncomingBearerToken();
+
+            var request = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
+            if (!string.IsNullOrWhiteSpace(bearer))
+            {
+                request.Headers.Remove("Authorization");
+                request.Headers.Add("Authorization", $"Bearer {bearer}");
+            }
+            else
+            {
+                _logger.LogWarning("Branch-list uchun token topilmadi - PHP API 401 qaytarishi mumkin");
+            }
+
+            var response = await _httpClient.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {

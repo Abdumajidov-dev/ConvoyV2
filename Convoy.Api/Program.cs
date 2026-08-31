@@ -81,6 +81,9 @@ builder.Services.AddScoped<ILocationRepository, LocationRepository>();
 builder.Services.AddScoped<IDailyDistanceReportRepository, DailyDistanceReportRepository>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 
+// HttpContext - PhpApiService joriy so'rovning tokenini olishi uchun
+builder.Services.AddHttpContextAccessor();
+
 // HttpClient for PhpApiService
 builder.Services.AddHttpClient<IPhpApiService, PhpApiService>();
 
